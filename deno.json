@@ -1,0 +1,6 @@
+{
+  "tasks": {
+    "lint": "deno fmt --check && deno lint && deno check --unstable --all main.ts",
+    "test": "deno test --unstable --check=all"
+  }
+}
