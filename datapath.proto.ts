@@ -291,6 +291,7 @@ export interface KvMutation {
   key: Uint8Array;
   value: KvValue;
   mutation_type: KvMutationType;
+  expire_at_ms: bigint;
 }
 
 export function defaultKvMutation(): KvMutation {
@@ -298,6 +299,7 @@ export function defaultKvMutation(): KvMutation {
     key: new Uint8Array(),
     value: defaultKvValue(),
     mutation_type: 0,
+    expire_at_ms: 0n,
   };
 }
 
@@ -321,6 +323,10 @@ export function decodeKvMutation(buf: Uint8Array): KvMutation {
       case 3:
         assertWireType(tag, 0);
         msg.mutation_type = readPbInt32(r);
+        break;
+      case 4:
+        assertWireType(tag, 0);
+        msg.expire_at_ms = readPbInt64(r);
         break;
     }
   }

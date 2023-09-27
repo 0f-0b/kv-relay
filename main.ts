@@ -75,7 +75,7 @@ try {
   const ephemeralTokens = new Set<string>();
   const isEphemeralTokenValid = (token: string | null) =>
     token !== null && ephemeralTokens.has(token);
-  const server = Deno.serve({ hostname: host, port, signal }, async (req) => {
+  const server = Deno.serve({ hostname: host, port }, async (req) => {
     const url = new URL(req.url);
     switch (url.pathname) {
       case "/": {
@@ -139,7 +139,13 @@ try {
         return new Response(null, { status: 404 });
     }
   });
-  await server.finished;
+  const onAbort = () => server.shutdown();
+  signal.addEventListener("abort", onAbort, { once: true });
+  try {
+    await server.finished;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+  }
 } finally {
   kv.close();
 }

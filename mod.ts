@@ -123,6 +123,7 @@ export class KvRelay {
     console.group("kv.atomic()");
     try {
       const op = kv.atomic();
+      const now = Date.now();
       for (const check of req.kv_checks) {
         const key = decodeKey(check.key);
         const versionstamp = check.versionstamp.some(Boolean)
@@ -137,8 +138,13 @@ export class KvRelay {
         switch (mutation.mutation_type) {
           case KvMutationType.M_SET: {
             const value = deserializeValue(mutation.value);
-            console.log(".set(%o, %o)", key, value);
-            op.set(key, value);
+            const options: { expireIn?: number } = {};
+            if (mutation.expire_at_ms) {
+              const expireAt = Number(mutation.expire_at_ms);
+              options.expireIn = expireAt - now;
+            }
+            console.log(".set(%o, %o, %o)", key, value, options);
+            op.set(key, value, options);
             break;
           }
           case KvMutationType.M_CLEAR:
