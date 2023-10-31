@@ -6,10 +6,10 @@ import {
   encodeAtomicWriteOutput,
   encodeSnapshotReadOutput,
   type KvEntry,
-  KvMutationType,
   type KvValue,
-  KvValueEncoding,
+  MutationType,
   type SnapshotReadOutput,
+  ValueEncoding,
 } from "./datapath.proto.ts";
 import { decodeHex, encodeHex } from "./hex.ts";
 import { decodeKey, decodeRangeKey, encodeKey } from "./key_codec.ts";
@@ -17,24 +17,24 @@ import { deserialize, serialize } from "./v8_serializer.ts";
 
 function serializeValue(value: unknown): KvValue {
   if (value instanceof Uint8Array) {
-    return { data: value, encoding: KvValueEncoding.VE_BYTES };
+    return { data: value, encoding: ValueEncoding.VE_BYTES };
   }
   if (value instanceof Deno.KvU64) {
     const bytes = new Uint8Array(8);
     new DataView(bytes.buffer).setBigUint64(0, value.value, true);
-    return { data: bytes, encoding: KvValueEncoding.VE_LE64 };
+    return { data: bytes, encoding: ValueEncoding.VE_LE64 };
   }
   return {
     data: serialize(value, { forStorage: true }),
-    encoding: KvValueEncoding.VE_V8,
+    encoding: ValueEncoding.VE_V8,
   };
 }
 
 function deserializeValue({ data, encoding }: KvValue): unknown {
   switch (encoding) {
-    case KvValueEncoding.VE_V8:
+    case ValueEncoding.VE_V8:
       return deserialize(data, { forStorage: true });
-    case KvValueEncoding.VE_LE64:
+    case ValueEncoding.VE_LE64:
       if (data.length !== 8) {
         throw new TypeError("Size of LE64 encoded value must be 8 bytes");
       }
@@ -42,7 +42,7 @@ function deserializeValue({ data, encoding }: KvValue): unknown {
         new DataView(data.buffer, data.byteOffset, data.byteLength)
           .getBigUint64(0, true),
       );
-    case KvValueEncoding.VE_BYTES:
+    case ValueEncoding.VE_BYTES:
       return data;
     default:
       throw new TypeError(`Unknown value encoding ${encoding}`);
@@ -110,9 +110,7 @@ export class KvRelay {
     const res: SnapshotReadOutput = {
       ranges,
       read_disabled: false,
-      regions_if_read_disabled: [],
       read_is_strongly_consistent: true,
-      primary_if_not_strongly_consistent: "",
     };
     return encodeSnapshotReadOutput(res);
   }
@@ -124,7 +122,7 @@ export class KvRelay {
     try {
       const op = kv.atomic();
       const now = Date.now();
-      for (const check of req.kv_checks) {
+      for (const check of req.checks) {
         const key = decodeKey(check.key);
         const versionstamp = check.versionstamp.some(Boolean)
           ? encodeHex(check.versionstamp)
@@ -133,10 +131,10 @@ export class KvRelay {
         console.log(".check(%o)", checkArg);
         op.check(checkArg);
       }
-      for (const mutation of req.kv_mutations) {
+      for (const mutation of req.mutations) {
         const key = decodeKey(mutation.key);
         switch (mutation.mutation_type) {
-          case KvMutationType.M_SET: {
+          case MutationType.M_SET: {
             const value = deserializeValue(mutation.value);
             const options: { expireIn?: number } = {};
             if (mutation.expire_at_ms) {
@@ -147,23 +145,23 @@ export class KvRelay {
             op.set(key, value, options);
             break;
           }
-          case KvMutationType.M_CLEAR:
+          case MutationType.M_DELETE:
             console.log(".delete(%o)", key);
             op.delete(key);
             break;
-          case KvMutationType.M_SUM: {
+          case MutationType.M_SUM: {
             const value = deserializeKvU64(mutation.value);
             console.log(".sum(%o, %o)", key, value);
             op.sum(key, value);
             break;
           }
-          case KvMutationType.M_MAX: {
+          case MutationType.M_MAX: {
             const value = deserializeKvU64(mutation.value);
             console.log(".max(%o, %o)", key, value);
             op.max(key, value);
             break;
           }
-          case KvMutationType.M_MIN: {
+          case MutationType.M_MIN: {
             const value = deserializeKvU64(mutation.value);
             console.log(".min(%o, %o)", key, value);
             op.min(key, value);
@@ -178,7 +176,7 @@ export class KvRelay {
       const res: AtomicWriteOutput = {
         status: AtomicWriteStatus.AW_SUCCESS,
         versionstamp: new Uint8Array(),
-        primary_if_write_disabled: "",
+        failed_checks: [],
       };
       try {
         console.log(".commit();");
