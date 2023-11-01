@@ -69,83 +69,79 @@ function unauthorized(): Response {
   });
 }
 
-const kv = await Deno.openKv(path);
-try {
-  const relay = new KvRelay(kv);
-  const ephemeralTokens = new Set<string>();
-  const isEphemeralTokenValid = (token: string | null) =>
-    token !== null && ephemeralTokens.has(token);
-  const server = Deno.serve({ hostname: host, port }, async (req) => {
-    const url = new URL(req.url);
-    switch (url.pathname) {
-      case "/": {
-        if (req.method !== "POST") {
-          return methodNotAllowed("POST");
-        }
-        if (getToken(req.headers) !== accessToken) {
-          return unauthorized();
-        }
-        let ephemeralToken: string;
-        do {
-          ephemeralToken = crypto.randomUUID();
-        } while (ephemeralTokens.has(ephemeralToken));
-        ephemeralTokens.add(ephemeralToken);
-        const ephemeralTokenExpireTime = Date.now() + ephemeralTokenTtl;
-        Deno.unrefTimer(setTimeout(
-          () => ephemeralTokens.delete(ephemeralToken),
-          ephemeralTokenTtl,
-        ));
-        return Response.json({
-          version: 1,
-          databaseId,
-          endpoints: [
-            { url: url.origin, consistency: "strong" },
-          ],
-          token: ephemeralToken,
-          expiresAt: new Date(ephemeralTokenExpireTime),
-        });
+using kv = await Deno.openKv(path);
+const relay = new KvRelay(kv);
+const ephemeralTokens = new Set<string>();
+const isEphemeralTokenValid = (token: string | null) =>
+  token !== null && ephemeralTokens.has(token);
+const server = Deno.serve({ hostname: host, port }, async (req) => {
+  const url = new URL(req.url);
+  switch (url.pathname) {
+    case "/": {
+      if (req.method !== "POST") {
+        return methodNotAllowed("POST");
       }
-      case "/snapshot_read":
-        if (req.method !== "POST") {
-          return methodNotAllowed("POST");
-        }
-        if (!isEphemeralTokenValid(getToken(req.headers))) {
-          return unauthorized();
-        }
-        try {
-          return new Response(
-            await relay.snapshotRead(new Uint8Array(await req.arrayBuffer())),
-          );
-        } catch (e: unknown) {
-          console.error(e);
-          return badRequest();
-        }
-      case "/atomic_write":
-        if (req.method !== "POST") {
-          return methodNotAllowed("POST");
-        }
-        if (!isEphemeralTokenValid(getToken(req.headers))) {
-          return unauthorized();
-        }
-        try {
-          return new Response(
-            await relay.atomicWrite(new Uint8Array(await req.arrayBuffer())),
-          );
-        } catch (e: unknown) {
-          console.error(e);
-          return badRequest();
-        }
-      default:
-        return new Response(null, { status: 404 });
+      if (getToken(req.headers) !== accessToken) {
+        return unauthorized();
+      }
+      let ephemeralToken: string;
+      do {
+        ephemeralToken = crypto.randomUUID();
+      } while (ephemeralTokens.has(ephemeralToken));
+      ephemeralTokens.add(ephemeralToken);
+      const ephemeralTokenExpireTime = Date.now() + ephemeralTokenTtl;
+      Deno.unrefTimer(setTimeout(
+        () => ephemeralTokens.delete(ephemeralToken),
+        ephemeralTokenTtl,
+      ));
+      return Response.json({
+        version: 1,
+        databaseId,
+        endpoints: [
+          { url: url.origin, consistency: "strong" },
+        ],
+        token: ephemeralToken,
+        expiresAt: new Date(ephemeralTokenExpireTime),
+      });
     }
-  });
-  const onAbort = () => server.shutdown();
-  signal.addEventListener("abort", onAbort, { once: true });
-  try {
-    await server.finished;
-  } finally {
-    signal.removeEventListener("abort", onAbort);
+    case "/snapshot_read":
+      if (req.method !== "POST") {
+        return methodNotAllowed("POST");
+      }
+      if (!isEphemeralTokenValid(getToken(req.headers))) {
+        return unauthorized();
+      }
+      try {
+        return new Response(
+          await relay.snapshotRead(new Uint8Array(await req.arrayBuffer())),
+        );
+      } catch (e: unknown) {
+        console.error(e);
+        return badRequest();
+      }
+    case "/atomic_write":
+      if (req.method !== "POST") {
+        return methodNotAllowed("POST");
+      }
+      if (!isEphemeralTokenValid(getToken(req.headers))) {
+        return unauthorized();
+      }
+      try {
+        return new Response(
+          await relay.atomicWrite(new Uint8Array(await req.arrayBuffer())),
+        );
+      } catch (e: unknown) {
+        console.error(e);
+        return badRequest();
+      }
+    default:
+      return new Response(null, { status: 404 });
   }
+});
+const onAbort = () => server.shutdown();
+signal.addEventListener("abort", onAbort, { once: true });
+try {
+  await server.finished;
 } finally {
-  kv.close();
+  signal.removeEventListener("abort", onAbort);
 }
