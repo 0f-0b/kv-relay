@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --unstable --allow-read --allow-write --allow-net
+#!/usr/bin/env -S deno run --unstable-http --unstable-kv --allow-read --allow-write --allow-net
 
 import { Command } from "./deps/cliffy/command.ts";
 
@@ -98,13 +98,13 @@ const server = Deno.serve({ hostname: host, port }, async (req) => {
         version: 1,
         databaseId,
         endpoints: [
-          { url: url.origin, consistency: "strong" },
+          { url: new URL("/kv", url), consistency: "strong" },
         ],
         token: ephemeralToken,
         expiresAt: new Date(ephemeralTokenExpireTime),
       });
     }
-    case "/snapshot_read":
+    case "/kv/snapshot_read":
       if (req.method !== "POST") {
         return methodNotAllowed("POST");
       }
@@ -119,7 +119,7 @@ const server = Deno.serve({ hostname: host, port }, async (req) => {
         console.error(e);
         return badRequest();
       }
-    case "/atomic_write":
+    case "/kv/atomic_write":
       if (req.method !== "POST") {
         return methodNotAllowed("POST");
       }

@@ -8,6 +8,7 @@ import {
   writeInt16BESync,
   writeInt8Sync,
 } from "./deps/binio.ts";
+import { concat } from "./deps/std/bytes/concat.ts";
 
 const littleEndian = new Uint8Array(Uint16Array.of(1).buffer)[0] === 1;
 const encoder = new TextEncoder();
@@ -34,20 +35,6 @@ function trimStart(array: Uint8Array): Uint8Array {
     }
   }
   return array.subarray(len);
-}
-
-function concat(chunks: readonly Uint8Array[]): Uint8Array {
-  let size = 0;
-  for (const chunk of chunks) {
-    size += chunk.length;
-  }
-  const result = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return result;
 }
 
 function encodeBigIntBE(value: bigint): {

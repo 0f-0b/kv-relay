@@ -1,3 +1,5 @@
+import { decodeHex, encodeHex } from "./deps/std/encoding/hex.ts";
+
 import {
   type AtomicWriteOutput,
   AtomicWriteStatus,
@@ -11,7 +13,6 @@ import {
   type SnapshotReadOutput,
   ValueEncoding,
 } from "./datapath.proto.ts";
-import { decodeHex, encodeHex } from "./hex.ts";
 import { decodeKey, decodeRangeKey, encodeKey } from "./key_codec.ts";
 import { deserialize, serialize } from "./v8_serializer.ts";
 
