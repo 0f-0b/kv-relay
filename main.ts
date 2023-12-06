@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --unstable-http --unstable-kv --allow-read --allow-write --allow-net
+#!/usr/bin/env -S deno run --unstable-kv --allow-read --allow-write --allow-net
 
 import { Command } from "./deps/cliffy/command.ts";
 
