@@ -134,6 +134,21 @@ const server = Deno.serve({ hostname: host, port }, async (req) => {
         console.error(e);
         return badRequest();
       }
+    case "/kv/watch":
+      if (req.method !== "POST") {
+        return methodNotAllowed("POST");
+      }
+      if (!isEphemeralTokenValid(getToken(req.headers))) {
+        return unauthorized();
+      }
+      try {
+        return new Response(
+          relay.watch(new Uint8Array(await req.arrayBuffer())),
+        );
+      } catch (e: unknown) {
+        console.error(e);
+        return badRequest();
+      }
     default:
       return new Response(null, { status: 404 });
   }

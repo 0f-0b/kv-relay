@@ -49,6 +49,7 @@ export interface SnapshotReadOutput {
   ranges: ReadRangeOutput[];
   read_disabled: boolean;
   read_is_strongly_consistent: boolean;
+  status: SnapshotReadStatus;
 }
 
 export function encodeSnapshotReadOutput(msg: SnapshotReadOutput): Uint8Array {
@@ -74,8 +75,22 @@ export function encodeSnapshotReadOutput(msg: SnapshotReadOutput): Uint8Array {
       value: encodePbBool(msg.read_is_strongly_consistent),
     });
   }
+  if (msg.status) {
+    writePbRecord(w, {
+      fieldNumber: 8,
+      wireType: PbWireType.VARINT,
+      value: encodePbInt32(msg.status),
+    });
+  }
   return w.bytes;
 }
+
+export const SnapshotReadStatus = Object.freeze({
+  SR_UNSPECIFIED: 0,
+  SR_SUCCESS: 1,
+  SR_READ_DISABLED: 2,
+});
+export type SnapshotReadStatus = number;
 
 export interface ReadRange {
   start: Uint8Array;
@@ -247,7 +262,7 @@ export function decodeCheck(buf: Uint8Array): Check {
 
 export interface Mutation {
   key: Uint8Array;
-  value: KvValue;
+  value: KvValue | null;
   mutation_type: MutationType;
   expire_at_ms: bigint;
 }
@@ -255,7 +270,7 @@ export interface Mutation {
 export function defaultMutation(): Mutation {
   return {
     key: new Uint8Array(),
-    value: defaultKvValue(),
+    value: null,
     mutation_type: 0,
     expire_at_ms: 0n,
   };
@@ -372,6 +387,7 @@ export const MutationType = Object.freeze({
   M_SUM: 3,
   M_MAX: 4,
   M_MIN: 5,
+  M_SET_SUFFIX_VERSIONSTAMPED_KEY: 9,
 });
 export type MutationType = number;
 export const ValueEncoding = Object.freeze({
@@ -392,7 +408,7 @@ export type AtomicWriteStatus = number;
 export interface Enqueue {
   payload: Uint8Array;
   deadline_ms: bigint;
-  kv_keys_if_undelivered: Uint8Array[];
+  keys_if_undelivered: Uint8Array[];
   backoff_schedule: number[];
 }
 
@@ -400,7 +416,7 @@ export function defaultEnqueue(): Enqueue {
   return {
     payload: new Uint8Array(),
     deadline_ms: 0n,
-    kv_keys_if_undelivered: [],
+    keys_if_undelivered: [],
     backoff_schedule: [],
   };
 }
@@ -424,7 +440,7 @@ export function decodeEnqueue(buf: Uint8Array): Enqueue {
         break;
       case 3:
         assertWireType(record, PbWireType.LEN);
-        msg.kv_keys_if_undelivered.push(decodePbBytes(record.value));
+        msg.keys_if_undelivered.push(decodePbBytes(record.value));
         break;
       case 4:
         switch (record.wireType) {
@@ -440,4 +456,108 @@ export function decodeEnqueue(buf: Uint8Array): Enqueue {
     }
   }
   return msg;
+}
+
+export interface Watch {
+  keys: WatchKey[];
+}
+
+export function defaultWatch(): Watch {
+  return {
+    keys: [],
+  };
+}
+
+export function decodeWatch(buf: Uint8Array): Watch {
+  const msg = defaultWatch();
+  const r = new BufferReader(buf);
+  for (;;) {
+    const record = readPbRecord(r);
+    if (!record) {
+      break;
+    }
+    switch (record.fieldNumber) {
+      case 1:
+        assertWireType(record, PbWireType.LEN);
+        msg.keys.push(decodeWatchKey(record.value));
+        break;
+    }
+  }
+  return msg;
+}
+
+export interface WatchOutput {
+  status: SnapshotReadStatus;
+  keys: WatchKeyOutput[];
+}
+
+export function encodeWatchOutput(msg: WatchOutput): Uint8Array {
+  const w = new BufferWriter();
+  if (msg.status) {
+    writePbRecord(w, {
+      fieldNumber: 1,
+      wireType: PbWireType.VARINT,
+      value: encodePbInt32(msg.status),
+    });
+  }
+  for (const value of msg.keys) {
+    writePbRecord(w, {
+      fieldNumber: 2,
+      wireType: PbWireType.LEN,
+      value: encodeWatchKeyOutput(value),
+    });
+  }
+  return w.bytes;
+}
+
+export interface WatchKey {
+  key: Uint8Array;
+}
+
+export function defaultWatchKey(): WatchKey {
+  return {
+    key: new Uint8Array(),
+  };
+}
+
+export function decodeWatchKey(buf: Uint8Array): WatchKey {
+  const msg = defaultWatchKey();
+  const r = new BufferReader(buf);
+  for (;;) {
+    const record = readPbRecord(r);
+    if (!record) {
+      break;
+    }
+    switch (record.fieldNumber) {
+      case 1:
+        assertWireType(record, PbWireType.LEN);
+        msg.key = decodePbBytes(record.value);
+        break;
+    }
+  }
+  return msg;
+}
+
+export interface WatchKeyOutput {
+  changed: boolean;
+  entry_if_changed: KvEntry | null;
+}
+
+export function encodeWatchKeyOutput(msg: WatchKeyOutput): Uint8Array {
+  const w = new BufferWriter();
+  if (msg.changed) {
+    writePbRecord(w, {
+      fieldNumber: 1,
+      wireType: PbWireType.VARINT,
+      value: encodePbBool(msg.changed),
+    });
+  }
+  if (msg.entry_if_changed) {
+    writePbRecord(w, {
+      fieldNumber: 2,
+      wireType: PbWireType.LEN,
+      value: encodeKvEntry(msg.entry_if_changed),
+    });
+  }
+  return w.bytes;
 }

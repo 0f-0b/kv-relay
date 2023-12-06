@@ -5,12 +5,15 @@ import {
   AtomicWriteStatus,
   decodeAtomicWrite,
   decodeSnapshotRead,
+  decodeWatch,
   encodeAtomicWriteOutput,
   encodeSnapshotReadOutput,
+  encodeWatchOutput,
   type KvEntry,
   type KvValue,
   MutationType,
   type SnapshotReadOutput,
+  SnapshotReadStatus,
   ValueEncoding,
 } from "./datapath.proto.ts";
 import { decodeKey, decodeRangeKey, encodeKey } from "./key_codec.ts";
@@ -31,7 +34,18 @@ function serializeValue(value: unknown): KvValue {
   };
 }
 
-function deserializeValue({ data, encoding }: KvValue): unknown {
+function serializeEntry(entry: Deno.KvEntry<unknown>): KvEntry {
+  const key = encodeKey(entry.key);
+  const { data: value, encoding } = serializeValue(entry.value);
+  const versionstamp = decodeHex(entry.versionstamp ?? "");
+  return { key, value, encoding, versionstamp };
+}
+
+function deserializeValue(value: KvValue | null): unknown {
+  if (!value) {
+    throw new TypeError("A value is required");
+  }
+  const { data, encoding } = value;
   switch (encoding) {
     case ValueEncoding.VE_V8:
       return deserialize(data, { forStorage: true });
@@ -50,7 +64,7 @@ function deserializeValue({ data, encoding }: KvValue): unknown {
   }
 }
 
-function deserializeKvU64(value: KvValue): bigint {
+function deserializeKvU64(value: KvValue | null): bigint {
   const u64 = deserializeValue(value);
   if (!(u64 instanceof Deno.KvU64)) {
     throw new TypeError("Value is not a Deno.KvU64");
@@ -70,12 +84,6 @@ export class KvRelay {
     const req = decodeSnapshotRead(buf);
     const ranges = await Promise.all(req.ranges.map(async (range) => {
       const values: KvEntry[] = [];
-      const addValue = (entry: Deno.KvEntry<unknown>) => {
-        const key = encodeKey(entry.key);
-        const { data: value, encoding } = serializeValue(entry.value);
-        const versionstamp = decodeHex(entry.versionstamp);
-        values.push({ key, value, encoding, versionstamp });
-      };
       const start = decodeRangeKey(range.start);
       const end = decodeRangeKey(range.end);
       let selector: Deno.KvListSelector;
@@ -104,7 +112,7 @@ export class KvRelay {
       }
       console.log("kv.list(%o, %o);", selector, options);
       for await (const entry of kv.list(selector, options)) {
-        addValue(entry);
+        values.push(serializeEntry(entry));
       }
       return { values };
     }));
@@ -112,6 +120,7 @@ export class KvRelay {
       ranges,
       read_disabled: false,
       read_is_strongly_consistent: true,
+      status: SnapshotReadStatus.SR_SUCCESS,
     };
     return encodeSnapshotReadOutput(res);
   }
@@ -119,80 +128,135 @@ export class KvRelay {
   async atomicWrite(buf: Uint8Array): Promise<Uint8Array> {
     const kv = this.#kv;
     const req = decodeAtomicWrite(buf);
-    console.group("kv.atomic()");
-    try {
-      const op = kv.atomic();
-      const now = Date.now();
-      for (const check of req.checks) {
-        const key = decodeKey(check.key);
-        const versionstamp = check.versionstamp.some(Boolean)
-          ? encodeHex(check.versionstamp)
-          : null;
-        const checkArg: Deno.AtomicCheck = { key, versionstamp };
-        console.log(".check(%o)", checkArg);
-        op.check(checkArg);
-      }
-      for (const mutation of req.mutations) {
-        const key = decodeKey(mutation.key);
-        switch (mutation.mutation_type) {
-          case MutationType.M_SET: {
-            const value = deserializeValue(mutation.value);
-            const options: { expireIn?: number } = {};
-            if (mutation.expire_at_ms) {
-              const expireAt = Number(mutation.expire_at_ms);
-              options.expireIn = expireAt - now;
-            }
-            console.log(".set(%o, %o, %o)", key, value, options);
-            op.set(key, value, options);
-            break;
-          }
-          case MutationType.M_DELETE:
-            console.log(".delete(%o)", key);
-            op.delete(key);
-            break;
-          case MutationType.M_SUM: {
-            const value = deserializeKvU64(mutation.value);
-            console.log(".sum(%o, %o)", key, value);
-            op.sum(key, value);
-            break;
-          }
-          case MutationType.M_MAX: {
-            const value = deserializeKvU64(mutation.value);
-            console.log(".max(%o, %o)", key, value);
-            op.max(key, value);
-            break;
-          }
-          case MutationType.M_MIN: {
-            const value = deserializeKvU64(mutation.value);
-            console.log(".min(%o, %o)", key, value);
-            op.min(key, value);
-            break;
-          }
-          default:
-            throw new TypeError(
-              `Unknown mutation type ${mutation.mutation_type}`,
-            );
-        }
-      }
-      const res: AtomicWriteOutput = {
-        status: AtomicWriteStatus.AW_SUCCESS,
-        versionstamp: new Uint8Array(),
-        failed_checks: [],
-      };
+    const op = (() => {
+      console.group("kv.atomic()");
       try {
-        console.log(".commit();");
-        const result = await op.commit();
-        if (result.ok) {
-          res.versionstamp = decodeHex(result.versionstamp);
-        } else {
-          res.status = AtomicWriteStatus.AW_CHECK_FAILURE;
+        const op = kv.atomic();
+        const now = Date.now();
+        for (const check of req.checks) {
+          const key = decodeKey(check.key);
+          const versionstamp = check.versionstamp.some(Boolean)
+            ? encodeHex(check.versionstamp)
+            : null;
+          const checkArg: Deno.AtomicCheck = { key, versionstamp };
+          console.log(".check(%o)", checkArg);
+          op.check(checkArg);
         }
-      } catch {
-        res.status = AtomicWriteStatus.AW_UNSPECIFIED;
+        for (const mutation of req.mutations) {
+          const key = decodeKey(mutation.key);
+          switch (mutation.mutation_type) {
+            case MutationType.M_SET: {
+              const value = deserializeValue(mutation.value);
+              const options: { expireIn?: number } = {};
+              if (mutation.expire_at_ms) {
+                const expireAt = Number(mutation.expire_at_ms);
+                options.expireIn = expireAt - now;
+              }
+              console.log(".set(%o, %o, %o)", key, value, options);
+              op.set(key, value, options);
+              break;
+            }
+            case MutationType.M_DELETE:
+              console.log(".delete(%o)", key);
+              op.delete(key);
+              break;
+            case MutationType.M_SUM: {
+              const value = deserializeKvU64(mutation.value);
+              console.log(".sum(%o, %o)", key, value);
+              op.sum(key, value);
+              break;
+            }
+            case MutationType.M_MAX: {
+              const value = deserializeKvU64(mutation.value);
+              console.log(".max(%o, %o)", key, value);
+              op.max(key, value);
+              break;
+            }
+            case MutationType.M_MIN: {
+              const value = deserializeKvU64(mutation.value);
+              console.log(".min(%o, %o)", key, value);
+              op.min(key, value);
+              break;
+            }
+            case MutationType.M_SET_SUFFIX_VERSIONSTAMPED_KEY:
+              deserializeValue(mutation.value);
+              throw new TypeError(
+                "Unimplemented: M_SET_SUFFIX_VERSIONSTAMPED_KEY",
+              );
+            default:
+              throw new TypeError(
+                `Unknown mutation type ${mutation.mutation_type}`,
+              );
+          }
+        }
+        for (const enqueue of req.enqueues) {
+          const value = deserializeValue({
+            data: enqueue.payload,
+            encoding: ValueEncoding.VE_V8,
+          });
+          const options: {
+            delay?: number;
+            keysIfUndelivered?: Deno.KvKey[];
+          } = {};
+          if (enqueue.deadline_ms > now) {
+            const deadline = Number(enqueue.deadline_ms);
+            options.delay = deadline - now;
+          }
+          if (enqueue.keys_if_undelivered.length) {
+            options.keysIfUndelivered = enqueue.keys_if_undelivered
+              .map(decodeKey);
+          }
+          console.log(".enqueue(%o, %o)", value, options);
+          op.enqueue(value, options);
+        }
+        console.log(".commit();");
+        return op;
+      } finally {
+        console.groupEnd();
       }
-      return encodeAtomicWriteOutput(res);
-    } finally {
-      console.groupEnd();
+    })();
+    const res: AtomicWriteOutput = {
+      status: AtomicWriteStatus.AW_SUCCESS,
+      versionstamp: new Uint8Array(),
+      failed_checks: [],
+    };
+    try {
+      const result = await op.commit();
+      if (result.ok) {
+        res.versionstamp = decodeHex(result.versionstamp);
+      } else {
+        res.status = AtomicWriteStatus.AW_CHECK_FAILURE;
+      }
+    } catch {
+      res.status = AtomicWriteStatus.AW_UNSPECIFIED;
     }
+    return encodeAtomicWriteOutput(res);
+  }
+
+  watch(buf: Uint8Array): ReadableStream<Uint8Array> {
+    const kv = this.#kv;
+    const req = decodeWatch(buf);
+    const keys = req.keys.map(({ key }) => decodeKey(key));
+    const options = { raw: true };
+    console.log("kv.watch(%o, %o);", keys, options);
+    return kv.watch(keys, options).pipeThrough(
+      new TransformStream({
+        transform(chunk, controller) {
+          const message = encodeWatchOutput({
+            status: SnapshotReadStatus.SR_SUCCESS,
+            keys: chunk.map((entry) => ({
+              changed: true,
+              entry_if_changed: entry.versionstamp === null
+                ? null
+                : serializeEntry(entry),
+            })),
+          });
+          const header = new Uint8Array(4);
+          new DataView(header.buffer).setUint32(0, message.length, true);
+          controller.enqueue(header);
+          controller.enqueue(message);
+        },
+      }),
+    );
   }
 }
