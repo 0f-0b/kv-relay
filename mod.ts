@@ -72,6 +72,10 @@ function deserializeKvU64(value: KvValue | null): bigint {
   return u64.value;
 }
 
+type KvEnqueueOptions = Deno.AtomicOperation["enqueue"] extends
+  (value: unknown, options?: infer T) => Deno.AtomicOperation ? T
+  : KvEnqueueOptions;
+
 export class KvRelay {
   readonly #kv: Deno.Kv;
 
@@ -178,11 +182,18 @@ export class KvRelay {
               op.min(key, value);
               break;
             }
-            case MutationType.M_SET_SUFFIX_VERSIONSTAMPED_KEY:
-              deserializeValue(mutation.value);
-              throw new TypeError(
-                "Unimplemented: M_SET_SUFFIX_VERSIONSTAMPED_KEY",
-              );
+            case MutationType.M_SET_SUFFIX_VERSIONSTAMPED_KEY: {
+              const value = deserializeValue(mutation.value);
+              const options: { expireIn?: number } = {};
+              if (mutation.expire_at_ms) {
+                const expireAt = Number(mutation.expire_at_ms);
+                options.expireIn = expireAt - now;
+              }
+              const suffixedKey = [...key, kv.commitVersionstamp()];
+              console.log(".set(%o, %o, %o)", suffixedKey, value, options);
+              op.set(suffixedKey, value, options);
+              break;
+            }
             default:
               throw new TypeError(
                 `Unknown mutation type ${mutation.mutation_type}`,
@@ -194,10 +205,7 @@ export class KvRelay {
             data: enqueue.payload,
             encoding: ValueEncoding.VE_V8,
           });
-          const options: {
-            delay?: number;
-            keysIfUndelivered?: Deno.KvKey[];
-          } = {};
+          const options: KvEnqueueOptions = {};
           if (enqueue.deadline_ms > now) {
             const deadline = Number(enqueue.deadline_ms);
             options.delay = deadline - now;
@@ -205,6 +213,9 @@ export class KvRelay {
           if (enqueue.keys_if_undelivered.length) {
             options.keysIfUndelivered = enqueue.keys_if_undelivered
               .map(decodeKey);
+          }
+          if (enqueue.backoff_schedule.length) {
+            options.backoffSchedule = enqueue.backoff_schedule;
           }
           console.log(".enqueue(%o, %o)", value, options);
           op.enqueue(value, options);

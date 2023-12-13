@@ -230,7 +230,7 @@ export function encodeKey(key: Deno.KvKey): Uint8Array {
         break;
       default:
         writeInt8Sync(w, 0x01);
-        writeKvBytes(w, part);
+        writeKvBytes(w, part as Exclude<typeof part, symbol>);
         break;
     }
   }
