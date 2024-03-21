@@ -1,1 +1,1 @@
-export * from "https://cdn.jsdelivr.net/gh/0f-0b/binio@fb210a58f171006ac34ed54884413c9ca5c1c5bb/mod.ts";
+export * from "https://cdn.jsdelivr.net/gh/0f-0b/binio@de6189a5c215950e15b390aa3e83fd2e48d9f8d7/mod.ts";

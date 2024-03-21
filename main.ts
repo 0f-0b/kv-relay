@@ -37,6 +37,16 @@ const {
     { default: 3600000 },
   )
   .arguments("[path:file]")
+  .error((error, cmd) => {
+    cmd.showHelp();
+    console.error(
+      "%cerror%c:",
+      "color: red; font-weight: bold",
+      "",
+      error.message,
+    );
+    Deno.exit(2);
+  })
   .parse();
 
 function getToken(headers: Headers): string | null {

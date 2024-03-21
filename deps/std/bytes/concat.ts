@@ -1,1 +1,1 @@
-export * from "https://deno.land/std@0.208.0/bytes/concat.ts";
+export * from "jsr:@std/bytes@^0.220.1/concat";

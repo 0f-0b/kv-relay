@@ -265,6 +265,9 @@ export interface Mutation {
   value: KvValue | null;
   mutation_type: MutationType;
   expire_at_ms: bigint;
+  sum_min: Uint8Array;
+  sum_max: Uint8Array;
+  sum_clamp: boolean;
 }
 
 export function defaultMutation(): Mutation {
@@ -273,6 +276,9 @@ export function defaultMutation(): Mutation {
     value: null,
     mutation_type: 0,
     expire_at_ms: 0n,
+    sum_min: new Uint8Array(),
+    sum_max: new Uint8Array(),
+    sum_clamp: false,
   };
 }
 
@@ -300,6 +306,18 @@ export function decodeMutation(buf: Uint8Array): Mutation {
       case 4:
         assertWireType(record, PbWireType.VARINT);
         msg.expire_at_ms = decodePbInt64(record.value);
+        break;
+      case 5:
+        assertWireType(record, PbWireType.LEN);
+        msg.sum_min = decodePbBytes(record.value);
+        break;
+      case 6:
+        assertWireType(record, PbWireType.LEN);
+        msg.sum_max = decodePbBytes(record.value);
+        break;
+      case 7:
+        assertWireType(record, PbWireType.VARINT);
+        msg.sum_clamp = decodePbBool(record.value);
         break;
     }
   }
