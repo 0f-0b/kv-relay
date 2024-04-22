@@ -1,1 +1,1 @@
-export * from "jsr:@std/bytes@^0.220.1/concat";
+export * from "jsr:@std/bytes@^0.223.0/concat";

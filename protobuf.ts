@@ -1,13 +1,13 @@
 import {
-  BufferReader,
-  BufferWriter,
   readBigUint64LESync,
   readBigVarUint64LESync,
   readFullSync,
   readUint32LESync,
+  Uint8ArrayReader,
+  Uint8ArrayWriter,
   unexpectedEof,
   writeBigInt64LESync,
-  writeBigVarInt64LESync,
+  writeBigVarUint64LESync,
   writeInt32LESync,
 } from "./deps/binio.ts";
 
@@ -45,7 +45,7 @@ const readPbVarint = readBigVarUint64LESync;
 const readPbI32 = readUint32LESync;
 const readPbI64 = readBigUint64LESync;
 
-function readPbLenPrefix(r: BufferReader): Uint8Array | null {
+function readPbLenPrefix(r: Uint8ArrayReader): Uint8Array | null {
   const rawLen = readPbVarint(r);
   if (rawLen === null) {
     return null;
@@ -60,7 +60,7 @@ function readPbLenPrefix(r: BufferReader): Uint8Array | null {
   return readFullSync(r, new Uint8Array(len)) ?? unexpectedEof();
 }
 
-export function readPbRecord(r: BufferReader): PbRecord | null {
+export function readPbRecord(r: Uint8ArrayReader): PbRecord | null {
   const rawTag = readPbVarint(r);
   if (rawTag === null) {
     return null;
@@ -93,11 +93,11 @@ export function readPbRecord(r: BufferReader): PbRecord | null {
   }
 }
 
-const writePbVarint = writeBigVarInt64LESync;
+const writePbVarint = writeBigVarUint64LESync;
 const writePbI32 = writeInt32LESync;
 const writePbI64 = writeBigInt64LESync;
 
-function writePbLenPrefix(w: BufferWriter, value: Uint8Array): undefined {
+function writePbLenPrefix(w: Uint8ArrayWriter, value: Uint8Array): undefined {
   if (value.length > 0x7fffffff) {
     throw new RangeError("Length prefixed payload too long");
   }
@@ -105,7 +105,10 @@ function writePbLenPrefix(w: BufferWriter, value: Uint8Array): undefined {
   w.write(value);
 }
 
-export function writePbRecord(w: BufferWriter, record: PbRecord): undefined {
+export function writePbRecord(
+  w: Uint8ArrayWriter,
+  record: PbRecord,
+): undefined {
   const { fieldNumber, wireType } = record;
   writePbVarint(w, encodePbUint32((fieldNumber << 3) | wireType));
   switch (wireType) {
@@ -150,7 +153,7 @@ export function encodePbBytes(value: Uint8Array): Uint8Array {
 }
 
 export function encodePbPackedUint32(from: readonly number[]): Uint8Array {
-  const p = new BufferWriter();
+  const p = new Uint8ArrayWriter();
   for (const value of from) {
     writePbVarint(p, encodePbUint32(value));
   }
@@ -181,7 +184,7 @@ export function decodePbPackedUint32(
   raw: Uint8Array,
   into: number[],
 ): undefined {
-  const p = new BufferReader(raw);
+  const p = new Uint8ArrayReader(raw);
   for (;;) {
     const rawValue = readPbVarint(p);
     if (rawValue === null) {

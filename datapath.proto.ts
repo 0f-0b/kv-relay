@@ -1,4 +1,4 @@
-import { BufferReader, BufferWriter } from "./deps/binio.ts";
+import { Uint8ArrayReader, Uint8ArrayWriter } from "./deps/binio.ts";
 
 import {
   assertWireType,
@@ -29,7 +29,7 @@ export function defaultSnapshotRead(): SnapshotRead {
 
 export function decodeSnapshotRead(buf: Uint8Array): SnapshotRead {
   const msg = defaultSnapshotRead();
-  const r = new BufferReader(buf);
+  const r = new Uint8ArrayReader(buf);
   for (;;) {
     const record = readPbRecord(r);
     if (!record) {
@@ -53,7 +53,7 @@ export interface SnapshotReadOutput {
 }
 
 export function encodeSnapshotReadOutput(msg: SnapshotReadOutput): Uint8Array {
-  const w = new BufferWriter();
+  const w = new Uint8ArrayWriter();
   for (const value of msg.ranges) {
     writePbRecord(w, {
       fieldNumber: 1,
@@ -110,7 +110,7 @@ export function defaultReadRange(): ReadRange {
 
 export function decodeReadRange(buf: Uint8Array): ReadRange {
   const msg = defaultReadRange();
-  const r = new BufferReader(buf);
+  const r = new Uint8ArrayReader(buf);
   for (;;) {
     const record = readPbRecord(r);
     if (!record) {
@@ -143,7 +143,7 @@ export interface ReadRangeOutput {
 }
 
 export function encodeReadRangeOutput(msg: ReadRangeOutput): Uint8Array {
-  const w = new BufferWriter();
+  const w = new Uint8ArrayWriter();
   for (const value of msg.values) {
     writePbRecord(w, {
       fieldNumber: 1,
@@ -170,7 +170,7 @@ export function defaultAtomicWrite(): AtomicWrite {
 
 export function decodeAtomicWrite(buf: Uint8Array): AtomicWrite {
   const msg = defaultAtomicWrite();
-  const r = new BufferReader(buf);
+  const r = new Uint8ArrayReader(buf);
   for (;;) {
     const record = readPbRecord(r);
     if (!record) {
@@ -201,7 +201,7 @@ export interface AtomicWriteOutput {
 }
 
 export function encodeAtomicWriteOutput(msg: AtomicWriteOutput): Uint8Array {
-  const w = new BufferWriter();
+  const w = new Uint8ArrayWriter();
   if (msg.status) {
     writePbRecord(w, {
       fieldNumber: 1,
@@ -240,7 +240,7 @@ export function defaultCheck(): Check {
 
 export function decodeCheck(buf: Uint8Array): Check {
   const msg = defaultCheck();
-  const r = new BufferReader(buf);
+  const r = new Uint8ArrayReader(buf);
   for (;;) {
     const record = readPbRecord(r);
     if (!record) {
@@ -284,7 +284,7 @@ export function defaultMutation(): Mutation {
 
 export function decodeMutation(buf: Uint8Array): Mutation {
   const msg = defaultMutation();
-  const r = new BufferReader(buf);
+  const r = new Uint8ArrayReader(buf);
   for (;;) {
     const record = readPbRecord(r);
     if (!record) {
@@ -338,7 +338,7 @@ export function defaultKvValue(): KvValue {
 
 export function decodeKvValue(buf: Uint8Array): KvValue {
   const msg = defaultKvValue();
-  const r = new BufferReader(buf);
+  const r = new Uint8ArrayReader(buf);
   for (;;) {
     const record = readPbRecord(r);
     if (!record) {
@@ -366,7 +366,7 @@ export interface KvEntry {
 }
 
 export function encodeKvEntry(msg: KvEntry): Uint8Array {
-  const w = new BufferWriter();
+  const w = new Uint8ArrayWriter();
   if (msg.key.length) {
     writePbRecord(w, {
       fieldNumber: 1,
@@ -441,7 +441,7 @@ export function defaultEnqueue(): Enqueue {
 
 export function decodeEnqueue(buf: Uint8Array): Enqueue {
   const msg = defaultEnqueue();
-  const r = new BufferReader(buf);
+  const r = new Uint8ArrayReader(buf);
   for (;;) {
     const record = readPbRecord(r);
     if (!record) {
@@ -488,7 +488,7 @@ export function defaultWatch(): Watch {
 
 export function decodeWatch(buf: Uint8Array): Watch {
   const msg = defaultWatch();
-  const r = new BufferReader(buf);
+  const r = new Uint8ArrayReader(buf);
   for (;;) {
     const record = readPbRecord(r);
     if (!record) {
@@ -510,7 +510,7 @@ export interface WatchOutput {
 }
 
 export function encodeWatchOutput(msg: WatchOutput): Uint8Array {
-  const w = new BufferWriter();
+  const w = new Uint8ArrayWriter();
   if (msg.status) {
     writePbRecord(w, {
       fieldNumber: 1,
@@ -540,7 +540,7 @@ export function defaultWatchKey(): WatchKey {
 
 export function decodeWatchKey(buf: Uint8Array): WatchKey {
   const msg = defaultWatchKey();
-  const r = new BufferReader(buf);
+  const r = new Uint8ArrayReader(buf);
   for (;;) {
     const record = readPbRecord(r);
     if (!record) {
@@ -562,7 +562,7 @@ export interface WatchKeyOutput {
 }
 
 export function encodeWatchKeyOutput(msg: WatchKeyOutput): Uint8Array {
-  const w = new BufferWriter();
+  const w = new Uint8ArrayWriter();
   if (msg.changed) {
     writePbRecord(w, {
       fieldNumber: 1,

@@ -1,5 +1,13 @@
 {
+  "lint": {
+    "rules": {
+      "include": [
+        "verbatim-module-syntax"
+      ]
+    }
+  },
   "tasks": {
+    "cache": "deno cache main.ts",
     "lint": "deno fmt --check && deno lint && deno check --all main.ts",
     "test": "deno test --unstable-kv --check=all"
   }
