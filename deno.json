@@ -7,8 +7,8 @@
     }
   },
   "tasks": {
-    "cache": "deno cache main.ts",
-    "lint": "deno fmt --check && deno lint && deno check --all main.ts",
-    "test": "deno test --unstable-kv --check=all"
+    "cache": "deno cache --allow-import=jsr.io:443 main.ts",
+    "lint": "deno fmt --check && deno lint && deno check --all --allow-import=jsr.io:443 main.ts",
+    "test": "deno test --unstable-kv --check=all --allow-import=jsr.io:443"
   }
 }

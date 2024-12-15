@@ -123,7 +123,7 @@ const server = Deno.serve({ hostname: host, port }, async (req) => {
       }
       try {
         return new Response(await relay.snapshotRead(await req.bytes()));
-      } catch (e: unknown) {
+      } catch (e) {
         console.error(e);
         return badRequest();
       }
@@ -136,7 +136,7 @@ const server = Deno.serve({ hostname: host, port }, async (req) => {
       }
       try {
         return new Response(await relay.atomicWrite(await req.bytes()));
-      } catch (e: unknown) {
+      } catch (e) {
         console.error(e);
         return badRequest();
       }
@@ -149,7 +149,7 @@ const server = Deno.serve({ hostname: host, port }, async (req) => {
       }
       try {
         return new Response(relay.watch(await req.bytes()));
-      } catch (e: unknown) {
+      } catch (e) {
         console.error(e);
         return badRequest();
       }
