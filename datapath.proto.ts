@@ -27,7 +27,7 @@ export function defaultSnapshotRead(): SnapshotRead {
   };
 }
 
-export function decodeSnapshotRead(buf: Uint8Array): SnapshotRead {
+export function decodeSnapshotRead(buf: Uint8Array<ArrayBuffer>): SnapshotRead {
   const msg = defaultSnapshotRead();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
@@ -52,7 +52,9 @@ export interface SnapshotReadOutput {
   status: SnapshotReadStatus;
 }
 
-export function encodeSnapshotReadOutput(msg: SnapshotReadOutput): Uint8Array {
+export function encodeSnapshotReadOutput(
+  msg: SnapshotReadOutput,
+): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   for (const value of msg.ranges) {
     writePbRecord(w, {
@@ -93,8 +95,8 @@ export const SnapshotReadStatus = Object.freeze({
 export type SnapshotReadStatus = number;
 
 export interface ReadRange {
-  start: Uint8Array;
-  end: Uint8Array;
+  start: Uint8Array<ArrayBuffer>;
+  end: Uint8Array<ArrayBuffer>;
   limit: number;
   reverse: boolean;
 }
@@ -108,7 +110,7 @@ export function defaultReadRange(): ReadRange {
   };
 }
 
-export function decodeReadRange(buf: Uint8Array): ReadRange {
+export function decodeReadRange(buf: Uint8Array<ArrayBuffer>): ReadRange {
   const msg = defaultReadRange();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
@@ -142,7 +144,9 @@ export interface ReadRangeOutput {
   values: KvEntry[];
 }
 
-export function encodeReadRangeOutput(msg: ReadRangeOutput): Uint8Array {
+export function encodeReadRangeOutput(
+  msg: ReadRangeOutput,
+): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   for (const value of msg.values) {
     writePbRecord(w, {
@@ -168,7 +172,7 @@ export function defaultAtomicWrite(): AtomicWrite {
   };
 }
 
-export function decodeAtomicWrite(buf: Uint8Array): AtomicWrite {
+export function decodeAtomicWrite(buf: Uint8Array<ArrayBuffer>): AtomicWrite {
   const msg = defaultAtomicWrite();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
@@ -196,11 +200,13 @@ export function decodeAtomicWrite(buf: Uint8Array): AtomicWrite {
 
 export interface AtomicWriteOutput {
   status: AtomicWriteStatus;
-  versionstamp: Uint8Array;
+  versionstamp: Uint8Array<ArrayBuffer>;
   failed_checks: number[];
 }
 
-export function encodeAtomicWriteOutput(msg: AtomicWriteOutput): Uint8Array {
+export function encodeAtomicWriteOutput(
+  msg: AtomicWriteOutput,
+): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   if (msg.status) {
     writePbRecord(w, {
@@ -227,8 +233,8 @@ export function encodeAtomicWriteOutput(msg: AtomicWriteOutput): Uint8Array {
 }
 
 export interface Check {
-  key: Uint8Array;
-  versionstamp: Uint8Array;
+  key: Uint8Array<ArrayBuffer>;
+  versionstamp: Uint8Array<ArrayBuffer>;
 }
 
 export function defaultCheck(): Check {
@@ -238,7 +244,7 @@ export function defaultCheck(): Check {
   };
 }
 
-export function decodeCheck(buf: Uint8Array): Check {
+export function decodeCheck(buf: Uint8Array<ArrayBuffer>): Check {
   const msg = defaultCheck();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
@@ -261,12 +267,12 @@ export function decodeCheck(buf: Uint8Array): Check {
 }
 
 export interface Mutation {
-  key: Uint8Array;
+  key: Uint8Array<ArrayBuffer>;
   value: KvValue | null;
   mutation_type: MutationType;
   expire_at_ms: bigint;
-  sum_min: Uint8Array;
-  sum_max: Uint8Array;
+  sum_min: Uint8Array<ArrayBuffer>;
+  sum_max: Uint8Array<ArrayBuffer>;
   sum_clamp: boolean;
 }
 
@@ -282,7 +288,7 @@ export function defaultMutation(): Mutation {
   };
 }
 
-export function decodeMutation(buf: Uint8Array): Mutation {
+export function decodeMutation(buf: Uint8Array<ArrayBuffer>): Mutation {
   const msg = defaultMutation();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
@@ -325,7 +331,7 @@ export function decodeMutation(buf: Uint8Array): Mutation {
 }
 
 export interface KvValue {
-  data: Uint8Array;
+  data: Uint8Array<ArrayBuffer>;
   encoding: ValueEncoding;
 }
 
@@ -336,7 +342,7 @@ export function defaultKvValue(): KvValue {
   };
 }
 
-export function decodeKvValue(buf: Uint8Array): KvValue {
+export function decodeKvValue(buf: Uint8Array<ArrayBuffer>): KvValue {
   const msg = defaultKvValue();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
@@ -359,13 +365,13 @@ export function decodeKvValue(buf: Uint8Array): KvValue {
 }
 
 export interface KvEntry {
-  key: Uint8Array;
-  value: Uint8Array;
+  key: Uint8Array<ArrayBuffer>;
+  value: Uint8Array<ArrayBuffer>;
   encoding: ValueEncoding;
-  versionstamp: Uint8Array;
+  versionstamp: Uint8Array<ArrayBuffer>;
 }
 
-export function encodeKvEntry(msg: KvEntry): Uint8Array {
+export function encodeKvEntry(msg: KvEntry): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   if (msg.key.length) {
     writePbRecord(w, {
@@ -424,9 +430,9 @@ export const AtomicWriteStatus = Object.freeze({
 export type AtomicWriteStatus = number;
 
 export interface Enqueue {
-  payload: Uint8Array;
+  payload: Uint8Array<ArrayBuffer>;
   deadline_ms: bigint;
-  keys_if_undelivered: Uint8Array[];
+  keys_if_undelivered: Uint8Array<ArrayBuffer>[];
   backoff_schedule: number[];
 }
 
@@ -439,7 +445,7 @@ export function defaultEnqueue(): Enqueue {
   };
 }
 
-export function decodeEnqueue(buf: Uint8Array): Enqueue {
+export function decodeEnqueue(buf: Uint8Array<ArrayBuffer>): Enqueue {
   const msg = defaultEnqueue();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
@@ -486,7 +492,7 @@ export function defaultWatch(): Watch {
   };
 }
 
-export function decodeWatch(buf: Uint8Array): Watch {
+export function decodeWatch(buf: Uint8Array<ArrayBuffer>): Watch {
   const msg = defaultWatch();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
@@ -509,7 +515,7 @@ export interface WatchOutput {
   keys: WatchKeyOutput[];
 }
 
-export function encodeWatchOutput(msg: WatchOutput): Uint8Array {
+export function encodeWatchOutput(msg: WatchOutput): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   if (msg.status) {
     writePbRecord(w, {
@@ -529,7 +535,7 @@ export function encodeWatchOutput(msg: WatchOutput): Uint8Array {
 }
 
 export interface WatchKey {
-  key: Uint8Array;
+  key: Uint8Array<ArrayBuffer>;
 }
 
 export function defaultWatchKey(): WatchKey {
@@ -538,7 +544,7 @@ export function defaultWatchKey(): WatchKey {
   };
 }
 
-export function decodeWatchKey(buf: Uint8Array): WatchKey {
+export function decodeWatchKey(buf: Uint8Array<ArrayBuffer>): WatchKey {
   const msg = defaultWatchKey();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
@@ -561,7 +567,9 @@ export interface WatchKeyOutput {
   entry_if_changed: KvEntry | null;
 }
 
-export function encodeWatchKeyOutput(msg: WatchKeyOutput): Uint8Array {
+export function encodeWatchKeyOutput(
+  msg: WatchKeyOutput,
+): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   if (msg.changed) {
     writePbRecord(w, {

@@ -19,13 +19,18 @@ const i64Buf = new BigInt64Array(f64Buf.buffer);
 const canonicalNaN = 0x7ff8000000000000n;
 const signBit = -0x8000000000000000n;
 
-function padStart(array: Uint8Array, len: number): Uint8Array {
+function padStart(
+  array: Uint8Array<ArrayBuffer>,
+  len: number,
+): Uint8Array<ArrayBuffer> {
   const result = new Uint8Array(len);
   result.set(array, result.length - array.length);
   return result;
 }
 
-function trimStart(array: Uint8Array): Uint8Array {
+function trimStart<B extends ArrayBufferLike>(
+  array: Uint8Array<B>,
+): Uint8Array<B> {
   const len = array.length;
   if (len === 0 || array[0] !== 0) {
     return array;
@@ -40,7 +45,7 @@ function trimStart(array: Uint8Array): Uint8Array {
 
 function encodeBigIntBE(value: bigint): {
   sign: boolean;
-  bytes: Uint8Array;
+  bytes: Uint8Array<ArrayBuffer>;
 } {
   let words = new BigUint64Array(1);
   let len = 0;
@@ -69,7 +74,7 @@ function encodeBigIntBE(value: bigint): {
   return { sign, bytes };
 }
 
-function decodeBigIntBE(sign: boolean, bytes: Uint8Array): bigint {
+function decodeBigIntBE(sign: boolean, bytes: Uint8Array<ArrayBuffer>): bigint {
   bytes = padStart(bytes, Math.ceil(bytes.length / 8) * 8);
   const words = new BigUint64Array(bytes.buffer);
   if (littleEndian) {
@@ -87,11 +92,11 @@ function decodeBigIntBE(sign: boolean, bytes: Uint8Array): bigint {
 }
 
 function readKvBytes(r: Uint8ArrayReader): {
-  value: Uint8Array;
-  remaining: Uint8Array;
+  value: Uint8Array<ArrayBuffer>;
+  remaining: Uint8Array<ArrayBuffer>;
 } {
   const bytes = r.readAll();
-  const chunks: Uint8Array[] = [];
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
   let len = 0;
   for (;;) {
     const nulPos = bytes.indexOf(0, len);
@@ -111,7 +116,7 @@ function readKvBytes(r: Uint8ArrayReader): {
 
 function readKvString(r: Uint8ArrayReader): {
   value: string;
-  remaining: Uint8Array;
+  remaining: Uint8Array<ArrayBuffer>;
 } {
   const { value, remaining } = readKvBytes(r);
   return { value: decoder.decode(value), remaining };
@@ -210,7 +215,7 @@ function writeKvFloat(w: Uint8ArrayWriter, value: number): undefined {
   writeBigInt64BESync(w, bits ^ ((bits >> 63n) | signBit));
 }
 
-export function encodeKey(key: Deno.KvKey): Uint8Array {
+export function encodeKey(key: Deno.KvKey): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   for (const part of key) {
     switch (typeof part) {
@@ -243,7 +248,7 @@ export interface RangeKey {
 }
 
 export function decodeKeyImpl(
-  bytes: Uint8Array,
+  bytes: Uint8Array<ArrayBuffer>,
   allowRange: boolean,
 ): RangeKey {
   const key: Deno.KvKeyPart[] = [];
@@ -301,10 +306,10 @@ export function decodeKeyImpl(
   return { key, mode };
 }
 
-export function decodeRangeKey(bytes: Uint8Array): RangeKey {
+export function decodeRangeKey(bytes: Uint8Array<ArrayBuffer>): RangeKey {
   return decodeKeyImpl(bytes, true);
 }
 
-export function decodeKey(bytes: Uint8Array): Deno.KvKey {
+export function decodeKey(bytes: Uint8Array<ArrayBuffer>): Deno.KvKey {
   return decodeKeyImpl(bytes, false).key;
 }

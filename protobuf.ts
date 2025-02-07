@@ -24,7 +24,11 @@ export type PbWireType = ValueOf<typeof PbWireType>;
 export type PbRecord =
   | { fieldNumber: number; wireType: typeof PbWireType.VARINT; value: bigint }
   | { fieldNumber: number; wireType: typeof PbWireType.I64; value: bigint }
-  | { fieldNumber: number; wireType: typeof PbWireType.LEN; value: Uint8Array }
+  | {
+    fieldNumber: number;
+    wireType: typeof PbWireType.LEN;
+    value: Uint8Array<ArrayBuffer>;
+  }
   | { fieldNumber: number; wireType: typeof PbWireType.SGROUP }
   | { fieldNumber: number; wireType: typeof PbWireType.EGROUP }
   | { fieldNumber: number; wireType: typeof PbWireType.I32; value: number };
@@ -45,7 +49,7 @@ const readPbVarint = readBigVarUint64LESync;
 const readPbI32 = readUint32LESync;
 const readPbI64 = readBigUint64LESync;
 
-function readPbLenPrefix(r: Uint8ArrayReader): Uint8Array | null {
+function readPbLenPrefix(r: Uint8ArrayReader): Uint8Array<ArrayBuffer> | null {
   const rawLen = readPbVarint(r);
   if (rawLen === null) {
     return null;
@@ -97,7 +101,10 @@ const writePbVarint = writeBigVarUint64LESync;
 const writePbI32 = writeInt32LESync;
 const writePbI64 = writeBigInt64LESync;
 
-function writePbLenPrefix(w: Uint8ArrayWriter, value: Uint8Array): undefined {
+function writePbLenPrefix(
+  w: Uint8ArrayWriter,
+  value: Uint8Array<ArrayBuffer>,
+): undefined {
   if (value.length > 0x7fffffff) {
     throw new RangeError("Length prefixed payload too long");
   }
@@ -148,11 +155,15 @@ export function encodePbBool(value: boolean): bigint {
   return encodePbInt32(value ? 1 : 0);
 }
 
-export function encodePbBytes(value: Uint8Array): Uint8Array {
+export function encodePbBytes(
+  value: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   return value;
 }
 
-export function encodePbPackedUint32(from: readonly number[]): Uint8Array {
+export function encodePbPackedUint32(
+  from: readonly number[],
+): Uint8Array<ArrayBuffer> {
   const p = new Uint8ArrayWriter();
   for (const value of from) {
     writePbVarint(p, encodePbUint32(value));
@@ -176,12 +187,14 @@ export function decodePbBool(raw: bigint): boolean {
   return decodePbInt32(raw) !== 0;
 }
 
-export function decodePbBytes(raw: Uint8Array): Uint8Array {
+export function decodePbBytes(
+  raw: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
   return raw;
 }
 
 export function decodePbPackedUint32(
-  raw: Uint8Array,
+  raw: Uint8Array<ArrayBuffer>,
   into: number[],
 ): undefined {
   const p = new Uint8ArrayReader(raw);

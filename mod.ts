@@ -21,7 +21,10 @@ import { deserialize, serialize } from "./v8_serializer.ts";
 
 function serializeValue(value: unknown): KvValue {
   if (value instanceof Uint8Array) {
-    return { data: value, encoding: ValueEncoding.VE_BYTES };
+    return {
+      data: value as Uint8Array<ArrayBuffer>,
+      encoding: ValueEncoding.VE_BYTES,
+    };
   }
   if (value instanceof Deno.KvU64) {
     const bytes = new Uint8Array(8);
@@ -83,7 +86,9 @@ export class KvRelay {
     this.#kv = kv;
   }
 
-  async snapshotRead(buf: Uint8Array): Promise<Uint8Array> {
+  async snapshotRead(
+    buf: Uint8Array<ArrayBuffer>,
+  ): Promise<Uint8Array<ArrayBuffer>> {
     const kv = this.#kv;
     const req = decodeSnapshotRead(buf);
     const ranges = await Promise.all(req.ranges.map(async (range) => {
@@ -129,7 +134,9 @@ export class KvRelay {
     return encodeSnapshotReadOutput(res);
   }
 
-  async atomicWrite(buf: Uint8Array): Promise<Uint8Array> {
+  async atomicWrite(
+    buf: Uint8Array<ArrayBuffer>,
+  ): Promise<Uint8Array<ArrayBuffer>> {
     const kv = this.#kv;
     const req = decodeAtomicWrite(buf);
     const op = (() => {
@@ -244,7 +251,7 @@ export class KvRelay {
     return encodeAtomicWriteOutput(res);
   }
 
-  watch(buf: Uint8Array): ReadableStream<Uint8Array> {
+  watch(buf: Uint8Array<ArrayBuffer>): ReadableStream<Uint8Array<ArrayBuffer>> {
     const kv = this.#kv;
     const req = decodeWatch(buf);
     const keys = req.keys.map(({ key }) => decodeKey(key));

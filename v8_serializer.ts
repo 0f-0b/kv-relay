@@ -4,16 +4,16 @@ export interface SerializerOptions {
   forStorage?: boolean;
 }
 
-export const { serialize, deserialize } =
+export const { deserialize, serialize } =
   // @ts-ignore Accessing Deno internals
   Deno[Deno.internal].core as {
-    readonly serialize: (
-      value: unknown,
-      options?: SerializerOptions,
-      errorCallback?: (message: string) => unknown,
-    ) => Uint8Array;
     readonly deserialize: (
       buffer: Uint8Array,
       options?: SerializerOptions,
     ) => unknown;
+    readonly serialize: (
+      value: unknown,
+      options?: SerializerOptions,
+      errorCallback?: (message: string) => unknown,
+    ) => Uint8Array<ArrayBuffer>;
   };
