@@ -1,1 +1,1 @@
-export * from "jsr:@ud2/binio@^0.2.0";
+export * from "jsr:@ud2/binio@^0.3.0";

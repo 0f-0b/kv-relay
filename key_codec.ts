@@ -91,11 +91,8 @@ function decodeBigIntBE(sign: boolean, bytes: Uint8Array<ArrayBuffer>): bigint {
   return value;
 }
 
-function readKvBytes(r: Uint8ArrayReader): {
-  value: Uint8Array<ArrayBuffer>;
-  remaining: Uint8Array<ArrayBuffer>;
-} {
-  const bytes = r.readAll();
+function readKvBytes(r: Uint8ArrayReader): Uint8Array<ArrayBuffer> {
+  const bytes = r.remaining;
   const chunks: Uint8Array<ArrayBuffer>[] = [];
   let len = 0;
   for (;;) {
@@ -111,15 +108,12 @@ function readKvBytes(r: Uint8ArrayReader): {
     chunks.push(bytes.subarray(len, nulPos + 1));
     len = nulPos + 2;
   }
-  return { value: concat(chunks), remaining: bytes.subarray(len) };
+  r.skip(len);
+  return concat(chunks);
 }
 
-function readKvString(r: Uint8ArrayReader): {
-  value: string;
-  remaining: Uint8Array<ArrayBuffer>;
-} {
-  const { value, remaining } = readKvBytes(r);
-  return { value: decoder.decode(value), remaining };
+function readKvString(r: Uint8ArrayReader): string {
+  return decoder.decode(readKvBytes(r));
 }
 
 function readKvInt(r: Uint8ArrayReader, tag: number): bigint {
@@ -253,7 +247,7 @@ export function decodeKeyImpl(
 ): RangeKey {
   const key: Deno.KvKeyPart[] = [];
   let mode: 1 | 0 | -1 = 0;
-  let r = new Uint8ArrayReader(bytes);
+  const r = new Uint8ArrayReader(bytes);
   for (;;) {
     const tag = readUint8Sync(r);
     if (tag === null) {
@@ -268,27 +262,17 @@ export function decodeKeyImpl(
           mode = -1;
           break;
       }
-      if (mode) {
-        const bytes = r.readAll();
-        if (bytes.length === 0) {
-          break;
-        }
-        r = new Uint8ArrayReader(bytes);
+      if (mode && r.remaining.length === 0) {
+        break;
       }
     }
     switch (tag) {
-      case 0x01: {
-        const { value, remaining } = readKvBytes(r);
-        key.push(value);
-        r = new Uint8ArrayReader(remaining);
+      case 0x01:
+        key.push(readKvBytes(r));
         break;
-      }
-      case 0x02: {
-        const { value, remaining } = readKvString(r);
-        key.push(value);
-        r = new Uint8ArrayReader(remaining);
+      case 0x02:
+        key.push(readKvString(r));
         break;
-      }
       case 0x21:
         key.push(readKvFloat(r));
         break;

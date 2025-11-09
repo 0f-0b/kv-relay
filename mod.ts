@@ -21,10 +21,7 @@ import { deserialize, serialize } from "./v8_serializer.ts";
 
 function serializeValue(value: unknown): KvValue {
   if (value instanceof Uint8Array) {
-    return {
-      data: value as Uint8Array<ArrayBuffer>,
-      encoding: ValueEncoding.VE_BYTES,
-    };
+    return { data: new Uint8Array(value), encoding: ValueEncoding.VE_BYTES };
   }
   if (value instanceof Deno.KvU64) {
     const bytes = new Uint8Array(8);
