@@ -1,208 +1,226 @@
 import {
+  readBigInt64LESync,
   readBigUint64LESync,
   readBigVarUint64LESync,
-  readFullSync,
+  readFloat32LESync,
+  readFloat64LESync,
+  readInt32LESync,
   readUint32LESync,
-  Uint8ArrayReader,
-  Uint8ArrayWriter,
+  readVarUint32LESync,
+  type Uint8ArrayReader,
   unexpectedEof,
   writeBigInt64LESync,
   writeBigVarUint64LESync,
+  writeFloat32LESync,
+  writeFloat64LESync,
   writeInt32LESync,
+  writeInt8Sync,
+  type WriterSync,
+  writeVarUint32LESync,
 } from "./deps/binio.ts";
 
-type ValueOf<T> = T[keyof T];
-export const PbWireType = Object.freeze({
-  VARINT: 0,
-  I64: 1,
-  LEN: 2,
-  SGROUP: 3,
-  EGROUP: 4,
-  I32: 5,
-});
-export type PbWireType = ValueOf<typeof PbWireType>;
-export type PbRecord =
-  | { fieldNumber: number; wireType: typeof PbWireType.VARINT; value: bigint }
-  | { fieldNumber: number; wireType: typeof PbWireType.I64; value: bigint }
-  | {
-    fieldNumber: number;
-    wireType: typeof PbWireType.LEN;
-    value: Uint8Array<ArrayBuffer>;
-  }
-  | { fieldNumber: number; wireType: typeof PbWireType.SGROUP }
-  | { fieldNumber: number; wireType: typeof PbWireType.EGROUP }
-  | { fieldNumber: number; wireType: typeof PbWireType.I32; value: number };
+const { asIntN, asUintN } = BigInt;
+const encoder = new TextEncoder();
+const decoder = new TextDecoder(undefined, { fatal: true, ignoreBOM: true });
 
-export function assertWireType<T extends PbWireType>(
-  record: PbRecord,
-  expected: T,
-): asserts record is PbRecord & { readonly wireType: T } {
-  const { fieldNumber, wireType } = record;
-  if (wireType !== expected) {
+function skipExact(r: Uint8ArrayReader, n: number): undefined {
+  if (r.skip(n) !== n) {
+    unexpectedEof();
+  }
+}
+
+export const VARINT = 0;
+export const I64 = 1;
+export const LEN = 2;
+export const SGROUP = 3;
+export const EGROUP = 4;
+export const I32 = 5;
+export type WireType =
+  | typeof VARINT
+  | typeof I64
+  | typeof LEN
+  | typeof SGROUP
+  | typeof EGROUP
+  | typeof I32;
+
+export interface Tag {
+  fieldNumber: number;
+  wireType: WireType;
+}
+
+export function assertWireType(
+  fieldNumber: number,
+  actual: WireType,
+  expected: WireType,
+): undefined {
+  if (actual !== expected) {
     throw new TypeError(
-      `Invalid wire type for field ${fieldNumber}: expected ${expected}, got ${wireType}`,
+      `Invalid wire type for field ${fieldNumber}: expected ${expected}, got ${actual}`,
     );
   }
 }
 
-const readPbVarint = readBigVarUint64LESync;
-const readPbI32 = readUint32LESync;
-const readPbI64 = readBigUint64LESync;
+export function skipPayload(
+  r: Uint8ArrayReader,
+  fieldNumber: number,
+  wireType: WireType,
+): undefined {
+  switch (wireType) {
+    case VARINT:
+      readUint64(r);
+      break;
+    case I64:
+      skipExact(r, 8);
+      break;
+    case LEN:
+      readBytes(r);
+      break;
+    case I32:
+      skipExact(r, 4);
+      break;
+    case SGROUP:
+      for (;;) {
+        const tag = readTag(r) ?? unexpectedEof();
+        if (tag.wireType === EGROUP) {
+          if (tag.fieldNumber !== fieldNumber) {
+            throw new TypeError("Malformed group");
+          }
+          break;
+        }
+        skipPayload(r, tag.fieldNumber, tag.wireType);
+      }
+      break;
+    default:
+      throw new TypeError(`Cannot skip wire type ${wireType}`);
+  }
+}
 
-function readPbLenPrefix(r: Uint8ArrayReader): Uint8Array<ArrayBuffer> | null {
-  const rawLen = readPbVarint(r);
-  if (rawLen === null) {
+export function readTag(r: Uint8ArrayReader): Tag | null {
+  const tag = readVarUint32LESync(r);
+  if (tag === null) {
     return null;
   }
-  const len = decodePbInt32(rawLen);
-  if (len < 0) {
+  const fieldNumber = tag >>> 3;
+  if (fieldNumber === 0) {
+    throw new TypeError("Field number cannot be 0");
+  }
+  const wireType = tag & 7;
+  if (wireType > 5) {
+    throw new TypeError(`Invalid wire type ${wireType}`);
+  }
+  return { fieldNumber, wireType: wireType as WireType };
+}
+
+export function readDouble(r: Uint8ArrayReader): number {
+  return readFloat64LESync(r) ?? unexpectedEof();
+}
+
+export function readFloat(r: Uint8ArrayReader): number {
+  return readFloat32LESync(r) ?? unexpectedEof();
+}
+
+export function readInt32(r: Uint8ArrayReader): number {
+  return Number(asIntN(32, readUint64(r)));
+}
+
+export function readInt64(r: Uint8ArrayReader): bigint {
+  return asIntN(64, readUint64(r));
+}
+
+export function readUint32(r: Uint8ArrayReader): number {
+  return Number(asUintN(32, readUint64(r)));
+}
+
+export function readUint64(r: Uint8ArrayReader): bigint {
+  return readBigVarUint64LESync(r) ?? unexpectedEof();
+}
+
+export function readSint32(r: Uint8ArrayReader): number {
+  const value = readUint32(r);
+  return (value >>> 1) ^ -(value & 1);
+}
+
+export function readSint64(r: Uint8ArrayReader): bigint {
+  const value = readUint64(r);
+  return (value >> 1n) ^ asIntN(1, value);
+}
+
+export function readFixed32(r: Uint8ArrayReader): number {
+  return readUint32LESync(r) ?? unexpectedEof();
+}
+
+export function readFixed64(r: Uint8ArrayReader): bigint {
+  return readBigUint64LESync(r) ?? unexpectedEof();
+}
+
+export function readSfixed32(r: Uint8ArrayReader): number {
+  return readInt32LESync(r) ?? unexpectedEof();
+}
+
+export function readSfixed64(r: Uint8ArrayReader): bigint {
+  return readBigInt64LESync(r) ?? unexpectedEof();
+}
+
+export function readBool(r: Uint8ArrayReader): boolean {
+  return !!readUint64(r);
+}
+
+export function readString(r: Uint8ArrayReader): string {
+  return decoder.decode(readBytes(r));
+}
+
+export function readBytes(r: Uint8ArrayReader): Uint8Array<ArrayBuffer> {
+  const len = readUint32(r);
+  const bytes = r.remaining;
+  if (len > bytes.length) {
+    unexpectedEof();
+  }
+  r.skip(len);
+  return bytes.subarray(0, len);
+}
+
+export function writeTag(w: WriterSync, tag: Tag): undefined {
+  const { fieldNumber, wireType } = tag;
+  writeUint32(w, (fieldNumber << 3) | wireType);
+}
+
+export const writeDouble = writeFloat64LESync;
+export const writeFloat = writeFloat32LESync;
+export const writeInt32 = writeVarUint32LESync;
+export const writeInt64 = writeBigVarUint64LESync;
+export const writeUint32 = writeVarUint32LESync;
+export const writeUint64 = writeBigVarUint64LESync;
+
+export function writeSint32(w: WriterSync, value: number): undefined {
+  value |= 0;
+  return writeUint32(w, (value << 1) ^ (value >> 31));
+}
+
+export function writeSint64(w: WriterSync, value: bigint): undefined {
+  value = asIntN(64, value);
+  return writeUint64(w, (value << 1n) ^ (value >> 63n));
+}
+
+export const writeFixed32 = writeInt32LESync;
+export const writeFixed64 = writeBigInt64LESync;
+export const writeSfixed32 = writeInt32LESync;
+export const writeSfixed64 = writeBigInt64LESync;
+
+export function writeBool(w: WriterSync, value: boolean): undefined {
+  return writeInt8Sync(w, value ? 1 : 0);
+}
+
+export function writeString(w: WriterSync, value: string): undefined {
+  return writeBytes(w, encoder.encode(value));
+}
+
+export function writeBytes(
+  w: WriterSync,
+  value: Uint8Array<ArrayBuffer>,
+): undefined {
+  if (value.length > 0xffffffff) {
     throw new RangeError("Length prefixed payload is too long");
   }
-  if (len === 0) {
-    return new Uint8Array();
-  }
-  return readFullSync(r, new Uint8Array(len)) ?? unexpectedEof();
-}
-
-export function readPbRecord(r: Uint8ArrayReader): PbRecord | null {
-  const rawTag = readPbVarint(r);
-  if (rawTag === null) {
-    return null;
-  }
-  const tag = decodePbUint32(rawTag);
-  const fieldNumber = tag >>> 3;
-  const wireType = tag & 7;
-  switch (wireType) {
-    case PbWireType.VARINT: {
-      const value = readPbVarint(r) ?? unexpectedEof();
-      return { fieldNumber, wireType, value };
-    }
-    case PbWireType.I64: {
-      const value = readPbI64(r) ?? unexpectedEof();
-      return { fieldNumber, wireType, value };
-    }
-    case PbWireType.LEN: {
-      const value = readPbLenPrefix(r) ?? unexpectedEof();
-      return { fieldNumber, wireType, value };
-    }
-    case PbWireType.I32: {
-      const value = readPbI32(r) ?? unexpectedEof();
-      return { fieldNumber, wireType, value };
-    }
-    case PbWireType.SGROUP:
-    case PbWireType.EGROUP:
-      return { fieldNumber, wireType };
-    default:
-      throw new TypeError(`Invalid wire type ${wireType}`);
-  }
-}
-
-const writePbVarint = writeBigVarUint64LESync;
-const writePbI32 = writeInt32LESync;
-const writePbI64 = writeBigInt64LESync;
-
-function writePbLenPrefix(
-  w: Uint8ArrayWriter,
-  value: Uint8Array<ArrayBuffer>,
-): undefined {
-  if (value.length > 0x7fffffff) {
-    throw new RangeError("Length prefixed payload too long");
-  }
-  writePbVarint(w, encodePbInt32(value.length));
+  writeUint32(w, value.length);
   w.write(value);
-}
-
-export function writePbRecord(
-  w: Uint8ArrayWriter,
-  record: PbRecord,
-): undefined {
-  const { fieldNumber, wireType } = record;
-  writePbVarint(w, encodePbUint32((fieldNumber << 3) | wireType));
-  switch (wireType) {
-    case PbWireType.VARINT:
-      writePbVarint(w, record.value);
-      break;
-    case PbWireType.I64:
-      writePbI64(w, record.value);
-      break;
-    case PbWireType.LEN:
-      writePbLenPrefix(w, record.value);
-      break;
-    case PbWireType.SGROUP:
-    case PbWireType.EGROUP:
-      break;
-    case PbWireType.I32:
-      writePbI32(w, record.value);
-      break;
-    default:
-      throw new TypeError(`Invalid wire type ${wireType}`);
-  }
-}
-
-export function encodePbInt32(value: number): bigint {
-  return BigInt(value >>> 0);
-}
-
-export function encodePbInt64(value: bigint): bigint {
-  return BigInt.asUintN(64, value);
-}
-
-export function encodePbUint32(value: number): bigint {
-  return BigInt(value >>> 0);
-}
-
-export function encodePbBool(value: boolean): bigint {
-  return encodePbInt32(value ? 1 : 0);
-}
-
-export function encodePbBytes(
-  value: Uint8Array<ArrayBuffer>,
-): Uint8Array<ArrayBuffer> {
-  return value;
-}
-
-export function encodePbPackedUint32(
-  from: readonly number[],
-): Uint8Array<ArrayBuffer> {
-  const p = new Uint8ArrayWriter();
-  for (const value of from) {
-    writePbVarint(p, encodePbUint32(value));
-  }
-  return p.bytes;
-}
-
-export function decodePbInt32(raw: bigint): number {
-  return Number(BigInt.asIntN(32, raw));
-}
-
-export function decodePbInt64(raw: bigint): bigint {
-  return BigInt.asIntN(64, raw);
-}
-
-export function decodePbUint32(raw: bigint): number {
-  return Number(BigInt.asUintN(32, raw));
-}
-
-export function decodePbBool(raw: bigint): boolean {
-  return decodePbInt32(raw) !== 0;
-}
-
-export function decodePbBytes(
-  raw: Uint8Array<ArrayBuffer>,
-): Uint8Array<ArrayBuffer> {
-  return raw;
-}
-
-export function decodePbPackedUint32(
-  raw: Uint8Array<ArrayBuffer>,
-  into: number[],
-): undefined {
-  const p = new Uint8ArrayReader(raw);
-  for (;;) {
-    const rawValue = readPbVarint(p);
-    if (rawValue === null) {
-      break;
-    }
-    into.push(decodePbUint32(rawValue));
-  }
 }

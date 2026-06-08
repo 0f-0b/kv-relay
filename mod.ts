@@ -124,8 +124,8 @@ export class KvRelay {
     }));
     const res: SnapshotReadOutput = {
       ranges,
-      read_disabled: false,
-      read_is_strongly_consistent: true,
+      readDisabled: false,
+      readIsStronglyConsistent: true,
       status: SnapshotReadStatus.SR_SUCCESS,
     };
     return encodeSnapshotReadOutput(res);
@@ -152,12 +152,12 @@ export class KvRelay {
         }
         for (const mutation of req.mutations) {
           const key = decodeKey(mutation.key);
-          switch (mutation.mutation_type) {
+          switch (mutation.mutationType) {
             case MutationType.M_SET: {
               const value = deserializeValue(mutation.value);
               const options: { expireIn?: number } = {};
-              if (mutation.expire_at_ms) {
-                const expireAt = Number(mutation.expire_at_ms);
+              if (mutation.expireAtMs) {
+                const expireAt = Number(mutation.expireAtMs);
                 options.expireIn = expireAt - now;
               }
               console.log(".set(%o, %o, %o)", key, value, options);
@@ -189,8 +189,8 @@ export class KvRelay {
             case MutationType.M_SET_SUFFIX_VERSIONSTAMPED_KEY: {
               const value = deserializeValue(mutation.value);
               const options: { expireIn?: number } = {};
-              if (mutation.expire_at_ms) {
-                const expireAt = Number(mutation.expire_at_ms);
+              if (mutation.expireAtMs) {
+                const expireAt = Number(mutation.expireAtMs);
                 options.expireIn = expireAt - now;
               }
               const suffixedKey = [...key, kv.commitVersionstamp()];
@@ -200,7 +200,7 @@ export class KvRelay {
             }
             default:
               throw new TypeError(
-                `Unknown mutation type ${mutation.mutation_type}`,
+                `Unknown mutation type ${mutation.mutationType}`,
               );
           }
         }
@@ -210,16 +210,16 @@ export class KvRelay {
             encoding: ValueEncoding.VE_V8,
           });
           const options: KvEnqueueOptions = {};
-          if (enqueue.deadline_ms > now) {
-            const deadline = Number(enqueue.deadline_ms);
+          if (enqueue.deadlineMs > now) {
+            const deadline = Number(enqueue.deadlineMs);
             options.delay = deadline - now;
           }
-          if (enqueue.keys_if_undelivered.length) {
-            options.keysIfUndelivered = enqueue.keys_if_undelivered
+          if (enqueue.keysIfUndelivered.length) {
+            options.keysIfUndelivered = enqueue.keysIfUndelivered
               .map(decodeKey);
           }
-          if (enqueue.backoff_schedule.length) {
-            options.backoffSchedule = enqueue.backoff_schedule;
+          if (enqueue.backoffSchedule.length) {
+            options.backoffSchedule = enqueue.backoffSchedule;
           }
           console.log(".enqueue(%o, %o)", value, options);
           op.enqueue(value, options);
@@ -233,7 +233,7 @@ export class KvRelay {
     const res: AtomicWriteOutput = {
       status: AtomicWriteStatus.AW_SUCCESS,
       versionstamp: new Uint8Array(),
-      failed_checks: [],
+      failedChecks: [],
     };
     try {
       const result = await op.commit();
@@ -261,7 +261,7 @@ export class KvRelay {
             status: SnapshotReadStatus.SR_SUCCESS,
             keys: chunk.map((entry) => ({
               changed: true,
-              entry_if_changed: entry.versionstamp === null
+              entryIfChanged: entry.versionstamp === null
                 ? null
                 : serializeEntry(entry),
             })),

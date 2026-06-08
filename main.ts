@@ -1,6 +1,7 @@
-#!/usr/bin/env -S deno run --unstable-kv --allow-read --allow-write --allow-net
+#!/usr/bin/env -S deno run --unstable-kv --allow-import=jsr.io:443 --allow-read --allow-write --allow-net
 
 import { Command } from "./deps/cliffy/command.ts";
+import { generateSecret, jwtVerify, SignJWT } from "./deps/jose.ts";
 
 import { signal } from "./interrupt_signal.ts";
 import { KvRelay } from "./mod.ts";
@@ -49,7 +50,7 @@ const {
   })
   .parse();
 
-function getToken(headers: Headers): string | null {
+function getBearerToken(headers: Headers): string | null {
   const authorization = headers.get("authorization");
   if (authorization === null || !authorization.startsWith("Bearer ")) {
     return null;
@@ -57,13 +58,24 @@ function getToken(headers: Headers): string | null {
   return authorization.substring("Bearer ".length);
 }
 
-function methodNotAllowed(...allowed: string[]): Response {
-  return new Response(null, {
-    status: 405,
-    headers: [
-      ["allow", allowed.join(", ")],
-    ],
-  });
+function validateAccessToken(headers: Headers): boolean {
+  return getBearerToken(headers) === accessToken;
+}
+
+const alg = "HS256";
+const secret = await generateSecret(alg);
+
+async function validateEphemeralToken(headers: Headers): Promise<boolean> {
+  const token = getBearerToken(headers);
+  if (token === null) {
+    return false;
+  }
+  try {
+    await jwtVerify(token, secret, { requiredClaims: ["exp"] });
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 function badRequest(): Response {
@@ -73,52 +85,40 @@ function badRequest(): Response {
 function unauthorized(): Response {
   return new Response(null, {
     status: 401,
-    headers: [
-      ["www-authenticate", "Bearer"],
-    ],
+    headers: { "www-authenticate": "Bearer" },
   });
 }
 
 using kv = await Deno.openKv(path);
 const relay = new KvRelay(kv);
-const ephemeralTokens = new Set<string>();
-const isEphemeralTokenValid = (token: string | null) =>
-  token !== null && ephemeralTokens.has(token);
 const server = Deno.serve({ hostname: host, port }, async (req) => {
+  if (req.method !== "POST") {
+    return new Response(null, {
+      status: 501,
+      headers: { "connection": "close" },
+    });
+  }
   const url = new URL(req.url);
   switch (url.pathname) {
     case "/": {
-      if (req.method !== "POST") {
-        return methodNotAllowed("POST");
-      }
-      if (getToken(req.headers) !== accessToken) {
+      if (!validateAccessToken(req.headers)) {
         return unauthorized();
       }
-      let ephemeralToken: string;
-      do {
-        ephemeralToken = crypto.randomUUID();
-      } while (ephemeralTokens.has(ephemeralToken));
-      ephemeralTokens.add(ephemeralToken);
-      const ephemeralTokenExpireTime = Date.now() + ephemeralTokenTtl;
-      Deno.unrefTimer(setTimeout(
-        () => ephemeralTokens.delete(ephemeralToken),
-        ephemeralTokenTtl,
-      ));
+      const expiresAt = new Date(Date.now() + ephemeralTokenTtl);
+      const token = await new SignJWT()
+        .setProtectedHeader({ alg })
+        .setExpirationTime(expiresAt)
+        .sign(secret);
       return Response.json({
         version: 1,
         databaseId,
-        endpoints: [
-          { url: new URL("/kv", url), consistency: "strong" },
-        ],
-        token: ephemeralToken,
-        expiresAt: new Date(ephemeralTokenExpireTime),
+        endpoints: [{ url: new URL("/kv", url), consistency: "strong" }],
+        token,
+        expiresAt,
       });
     }
     case "/kv/snapshot_read":
-      if (req.method !== "POST") {
-        return methodNotAllowed("POST");
-      }
-      if (!isEphemeralTokenValid(getToken(req.headers))) {
+      if (!await validateEphemeralToken(req.headers)) {
         return unauthorized();
       }
       try {
@@ -128,10 +128,7 @@ const server = Deno.serve({ hostname: host, port }, async (req) => {
         return badRequest();
       }
     case "/kv/atomic_write":
-      if (req.method !== "POST") {
-        return methodNotAllowed("POST");
-      }
-      if (!isEphemeralTokenValid(getToken(req.headers))) {
+      if (!await validateEphemeralToken(req.headers)) {
         return unauthorized();
       }
       try {
@@ -141,10 +138,7 @@ const server = Deno.serve({ hostname: host, port }, async (req) => {
         return badRequest();
       }
     case "/kv/watch":
-      if (req.method !== "POST") {
-        return methodNotAllowed("POST");
-      }
-      if (!isEphemeralTokenValid(getToken(req.headers))) {
+      if (!await validateEphemeralToken(req.headers)) {
         return unauthorized();
       }
       try {

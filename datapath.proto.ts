@@ -2,19 +2,20 @@ import { Uint8ArrayReader, Uint8ArrayWriter } from "./deps/binio.ts";
 
 import {
   assertWireType,
-  decodePbBool,
-  decodePbBytes,
-  decodePbInt32,
-  decodePbInt64,
-  decodePbPackedUint32,
-  decodePbUint32,
-  encodePbBool,
-  encodePbBytes,
-  encodePbInt32,
-  encodePbPackedUint32,
-  PbWireType,
-  readPbRecord,
-  writePbRecord,
+  LEN,
+  readBool,
+  readBytes,
+  readInt32,
+  readInt64,
+  readTag,
+  readUint32,
+  skipPayload,
+  VARINT,
+  writeBool,
+  writeBytes,
+  writeInt32,
+  writeTag,
+  writeUint32,
 } from "./protobuf.ts";
 
 export interface SnapshotRead {
@@ -22,23 +23,25 @@ export interface SnapshotRead {
 }
 
 export function defaultSnapshotRead(): SnapshotRead {
-  return {
-    ranges: [],
-  };
+  return { ranges: [] };
 }
 
 export function decodeSnapshotRead(buf: Uint8Array<ArrayBuffer>): SnapshotRead {
   const msg = defaultSnapshotRead();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
-    const record = readPbRecord(r);
-    if (!record) {
+    const tag = readTag(r);
+    if (!tag) {
       break;
     }
-    switch (record.fieldNumber) {
+    const { fieldNumber, wireType } = tag;
+    switch (fieldNumber) {
       case 1:
-        assertWireType(record, PbWireType.LEN);
-        msg.ranges.push(decodeReadRange(record.value));
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.ranges.push(decodeReadRange(readBytes(r)));
+        break;
+      default:
+        skipPayload(r, fieldNumber, wireType);
         break;
     }
   }
@@ -47,8 +50,8 @@ export function decodeSnapshotRead(buf: Uint8Array<ArrayBuffer>): SnapshotRead {
 
 export interface SnapshotReadOutput {
   ranges: ReadRangeOutput[];
-  read_disabled: boolean;
-  read_is_strongly_consistent: boolean;
+  readDisabled: boolean;
+  readIsStronglyConsistent: boolean;
   status: SnapshotReadStatus;
 }
 
@@ -57,32 +60,20 @@ export function encodeSnapshotReadOutput(
 ): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   for (const value of msg.ranges) {
-    writePbRecord(w, {
-      fieldNumber: 1,
-      wireType: PbWireType.LEN,
-      value: encodeReadRangeOutput(value),
-    });
+    writeTag(w, { fieldNumber: 1, wireType: LEN });
+    writeBytes(w, encodeReadRangeOutput(value));
   }
-  if (msg.read_disabled) {
-    writePbRecord(w, {
-      fieldNumber: 2,
-      wireType: PbWireType.VARINT,
-      value: encodePbBool(msg.read_disabled),
-    });
+  if (msg.readDisabled) {
+    writeTag(w, { fieldNumber: 2, wireType: VARINT });
+    writeBool(w, msg.readDisabled);
   }
-  if (msg.read_is_strongly_consistent) {
-    writePbRecord(w, {
-      fieldNumber: 4,
-      wireType: PbWireType.VARINT,
-      value: encodePbBool(msg.read_is_strongly_consistent),
-    });
+  if (msg.readIsStronglyConsistent) {
+    writeTag(w, { fieldNumber: 4, wireType: VARINT });
+    writeBool(w, msg.readIsStronglyConsistent);
   }
   if (msg.status) {
-    writePbRecord(w, {
-      fieldNumber: 8,
-      wireType: PbWireType.VARINT,
-      value: encodePbInt32(msg.status),
-    });
+    writeTag(w, { fieldNumber: 8, wireType: VARINT });
+    writeInt32(w, msg.status);
   }
   return w.bytes;
 }
@@ -114,26 +105,30 @@ export function decodeReadRange(buf: Uint8Array<ArrayBuffer>): ReadRange {
   const msg = defaultReadRange();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
-    const record = readPbRecord(r);
-    if (!record) {
+    const tag = readTag(r);
+    if (!tag) {
       break;
     }
-    switch (record.fieldNumber) {
+    const { fieldNumber, wireType } = tag;
+    switch (fieldNumber) {
       case 1:
-        assertWireType(record, PbWireType.LEN);
-        msg.start = decodePbBytes(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.start = readBytes(r);
         break;
       case 2:
-        assertWireType(record, PbWireType.LEN);
-        msg.end = decodePbBytes(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.end = readBytes(r);
         break;
       case 3:
-        assertWireType(record, PbWireType.VARINT);
-        msg.limit = decodePbInt32(record.value);
+        assertWireType(fieldNumber, wireType, VARINT);
+        msg.limit = readInt32(r);
         break;
       case 4:
-        assertWireType(record, PbWireType.VARINT);
-        msg.reverse = decodePbBool(record.value);
+        assertWireType(fieldNumber, wireType, VARINT);
+        msg.reverse = readBool(r);
+        break;
+      default:
+        skipPayload(r, fieldNumber, wireType);
         break;
     }
   }
@@ -149,11 +144,8 @@ export function encodeReadRangeOutput(
 ): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   for (const value of msg.values) {
-    writePbRecord(w, {
-      fieldNumber: 1,
-      wireType: PbWireType.LEN,
-      value: encodeKvEntry(value),
-    });
+    writeTag(w, { fieldNumber: 1, wireType: LEN });
+    writeBytes(w, encodeKvEntry(value));
   }
   return w.bytes;
 }
@@ -165,33 +157,33 @@ export interface AtomicWrite {
 }
 
 export function defaultAtomicWrite(): AtomicWrite {
-  return {
-    checks: [],
-    mutations: [],
-    enqueues: [],
-  };
+  return { checks: [], mutations: [], enqueues: [] };
 }
 
 export function decodeAtomicWrite(buf: Uint8Array<ArrayBuffer>): AtomicWrite {
   const msg = defaultAtomicWrite();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
-    const record = readPbRecord(r);
-    if (!record) {
+    const tag = readTag(r);
+    if (!tag) {
       break;
     }
-    switch (record.fieldNumber) {
+    const { fieldNumber, wireType } = tag;
+    switch (fieldNumber) {
       case 1:
-        assertWireType(record, PbWireType.LEN);
-        msg.checks.push(decodeCheck(record.value));
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.checks.push(decodeCheck(readBytes(r)));
         break;
       case 2:
-        assertWireType(record, PbWireType.LEN);
-        msg.mutations.push(decodeMutation(record.value));
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.mutations.push(decodeMutation(readBytes(r)));
         break;
       case 3:
-        assertWireType(record, PbWireType.LEN);
-        msg.enqueues.push(decodeEnqueue(record.value));
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.enqueues.push(decodeEnqueue(readBytes(r)));
+        break;
+      default:
+        skipPayload(r, fieldNumber, wireType);
         break;
     }
   }
@@ -201,7 +193,7 @@ export function decodeAtomicWrite(buf: Uint8Array<ArrayBuffer>): AtomicWrite {
 export interface AtomicWriteOutput {
   status: AtomicWriteStatus;
   versionstamp: Uint8Array<ArrayBuffer>;
-  failed_checks: number[];
+  failedChecks: number[];
 }
 
 export function encodeAtomicWriteOutput(
@@ -209,25 +201,20 @@ export function encodeAtomicWriteOutput(
 ): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   if (msg.status) {
-    writePbRecord(w, {
-      fieldNumber: 1,
-      wireType: PbWireType.VARINT,
-      value: encodePbInt32(msg.status),
-    });
+    writeTag(w, { fieldNumber: 1, wireType: VARINT });
+    writeInt32(w, msg.status);
   }
   if (msg.versionstamp.length) {
-    writePbRecord(w, {
-      fieldNumber: 2,
-      wireType: PbWireType.LEN,
-      value: encodePbBytes(msg.versionstamp),
-    });
+    writeTag(w, { fieldNumber: 2, wireType: LEN });
+    writeBytes(w, msg.versionstamp);
   }
-  if (msg.failed_checks.length) {
-    writePbRecord(w, {
-      fieldNumber: 4,
-      wireType: PbWireType.LEN,
-      value: encodePbPackedUint32(msg.failed_checks),
-    });
+  if (msg.failedChecks.length) {
+    writeTag(w, { fieldNumber: 4, wireType: LEN });
+    const p = new Uint8ArrayWriter();
+    for (const value of msg.failedChecks) {
+      writeUint32(p, value);
+    }
+    writeBytes(w, p.bytes);
   }
   return w.bytes;
 }
@@ -238,28 +225,29 @@ export interface Check {
 }
 
 export function defaultCheck(): Check {
-  return {
-    key: new Uint8Array(),
-    versionstamp: new Uint8Array(),
-  };
+  return { key: new Uint8Array(), versionstamp: new Uint8Array() };
 }
 
 export function decodeCheck(buf: Uint8Array<ArrayBuffer>): Check {
   const msg = defaultCheck();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
-    const record = readPbRecord(r);
-    if (!record) {
+    const tag = readTag(r);
+    if (!tag) {
       break;
     }
-    switch (record.fieldNumber) {
+    const { fieldNumber, wireType } = tag;
+    switch (fieldNumber) {
       case 1:
-        assertWireType(record, PbWireType.LEN);
-        msg.key = decodePbBytes(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.key = readBytes(r);
         break;
       case 2:
-        assertWireType(record, PbWireType.LEN);
-        msg.versionstamp = decodePbBytes(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.versionstamp = readBytes(r);
+        break;
+      default:
+        skipPayload(r, fieldNumber, wireType);
         break;
     }
   }
@@ -269,22 +257,22 @@ export function decodeCheck(buf: Uint8Array<ArrayBuffer>): Check {
 export interface Mutation {
   key: Uint8Array<ArrayBuffer>;
   value: KvValue | null;
-  mutation_type: MutationType;
-  expire_at_ms: bigint;
-  sum_min: Uint8Array<ArrayBuffer>;
-  sum_max: Uint8Array<ArrayBuffer>;
-  sum_clamp: boolean;
+  mutationType: MutationType;
+  expireAtMs: bigint;
+  sumMin: Uint8Array<ArrayBuffer>;
+  sumMax: Uint8Array<ArrayBuffer>;
+  sumClamp: boolean;
 }
 
 export function defaultMutation(): Mutation {
   return {
     key: new Uint8Array(),
     value: null,
-    mutation_type: 0,
-    expire_at_ms: 0n,
-    sum_min: new Uint8Array(),
-    sum_max: new Uint8Array(),
-    sum_clamp: false,
+    mutationType: 0,
+    expireAtMs: 0n,
+    sumMin: new Uint8Array(),
+    sumMax: new Uint8Array(),
+    sumClamp: false,
   };
 }
 
@@ -292,38 +280,42 @@ export function decodeMutation(buf: Uint8Array<ArrayBuffer>): Mutation {
   const msg = defaultMutation();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
-    const record = readPbRecord(r);
-    if (!record) {
+    const tag = readTag(r);
+    if (!tag) {
       break;
     }
-    switch (record.fieldNumber) {
+    const { fieldNumber, wireType } = tag;
+    switch (fieldNumber) {
       case 1:
-        assertWireType(record, PbWireType.LEN);
-        msg.key = decodePbBytes(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.key = readBytes(r);
         break;
       case 2:
-        assertWireType(record, PbWireType.LEN);
-        msg.value = decodeKvValue(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.value = decodeKvValue(readBytes(r));
         break;
       case 3:
-        assertWireType(record, PbWireType.VARINT);
-        msg.mutation_type = decodePbInt32(record.value);
+        assertWireType(fieldNumber, wireType, VARINT);
+        msg.mutationType = readInt32(r);
         break;
       case 4:
-        assertWireType(record, PbWireType.VARINT);
-        msg.expire_at_ms = decodePbInt64(record.value);
+        assertWireType(fieldNumber, wireType, VARINT);
+        msg.expireAtMs = readInt64(r);
         break;
       case 5:
-        assertWireType(record, PbWireType.LEN);
-        msg.sum_min = decodePbBytes(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.sumMin = readBytes(r);
         break;
       case 6:
-        assertWireType(record, PbWireType.LEN);
-        msg.sum_max = decodePbBytes(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.sumMax = readBytes(r);
         break;
       case 7:
-        assertWireType(record, PbWireType.VARINT);
-        msg.sum_clamp = decodePbBool(record.value);
+        assertWireType(fieldNumber, wireType, VARINT);
+        msg.sumClamp = readBool(r);
+        break;
+      default:
+        skipPayload(r, fieldNumber, wireType);
         break;
     }
   }
@@ -336,28 +328,29 @@ export interface KvValue {
 }
 
 export function defaultKvValue(): KvValue {
-  return {
-    data: new Uint8Array(),
-    encoding: 0,
-  };
+  return { data: new Uint8Array(), encoding: 0 };
 }
 
 export function decodeKvValue(buf: Uint8Array<ArrayBuffer>): KvValue {
   const msg = defaultKvValue();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
-    const record = readPbRecord(r);
-    if (!record) {
+    const tag = readTag(r);
+    if (!tag) {
       break;
     }
-    switch (record.fieldNumber) {
+    const { fieldNumber, wireType } = tag;
+    switch (fieldNumber) {
       case 1:
-        assertWireType(record, PbWireType.LEN);
-        msg.data = decodePbBytes(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.data = readBytes(r);
         break;
       case 2:
-        assertWireType(record, PbWireType.VARINT);
-        msg.encoding = decodePbInt32(record.value);
+        assertWireType(fieldNumber, wireType, VARINT);
+        msg.encoding = readInt32(r);
+        break;
+      default:
+        skipPayload(r, fieldNumber, wireType);
         break;
     }
   }
@@ -374,32 +367,20 @@ export interface KvEntry {
 export function encodeKvEntry(msg: KvEntry): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   if (msg.key.length) {
-    writePbRecord(w, {
-      fieldNumber: 1,
-      wireType: PbWireType.LEN,
-      value: encodePbBytes(msg.key),
-    });
+    writeTag(w, { fieldNumber: 1, wireType: LEN });
+    writeBytes(w, msg.key);
   }
   if (msg.value.length) {
-    writePbRecord(w, {
-      fieldNumber: 2,
-      wireType: PbWireType.LEN,
-      value: encodePbBytes(msg.value),
-    });
+    writeTag(w, { fieldNumber: 2, wireType: LEN });
+    writeBytes(w, msg.value);
   }
   if (msg.encoding) {
-    writePbRecord(w, {
-      fieldNumber: 3,
-      wireType: PbWireType.VARINT,
-      value: encodePbInt32(msg.encoding),
-    });
+    writeTag(w, { fieldNumber: 3, wireType: VARINT });
+    writeInt32(w, msg.encoding);
   }
   if (msg.versionstamp.length) {
-    writePbRecord(w, {
-      fieldNumber: 4,
-      wireType: PbWireType.LEN,
-      value: encodePbBytes(msg.versionstamp),
-    });
+    writeTag(w, { fieldNumber: 4, wireType: LEN });
+    writeBytes(w, msg.versionstamp);
   }
   return w.bytes;
 }
@@ -431,17 +412,17 @@ export type AtomicWriteStatus = number;
 
 export interface Enqueue {
   payload: Uint8Array<ArrayBuffer>;
-  deadline_ms: bigint;
-  keys_if_undelivered: Uint8Array<ArrayBuffer>[];
-  backoff_schedule: number[];
+  deadlineMs: bigint;
+  keysIfUndelivered: Uint8Array<ArrayBuffer>[];
+  backoffSchedule: number[];
 }
 
 export function defaultEnqueue(): Enqueue {
   return {
     payload: new Uint8Array(),
-    deadline_ms: 0n,
-    keys_if_undelivered: [],
-    backoff_schedule: [],
+    deadlineMs: 0n,
+    keysIfUndelivered: [],
+    backoffSchedule: [],
   };
 }
 
@@ -449,33 +430,37 @@ export function decodeEnqueue(buf: Uint8Array<ArrayBuffer>): Enqueue {
   const msg = defaultEnqueue();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
-    const record = readPbRecord(r);
-    if (!record) {
+    const tag = readTag(r);
+    if (!tag) {
       break;
     }
-    switch (record.fieldNumber) {
+    const { fieldNumber, wireType } = tag;
+    switch (fieldNumber) {
       case 1:
-        assertWireType(record, PbWireType.LEN);
-        msg.payload = decodePbBytes(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.payload = readBytes(r);
         break;
       case 2:
-        assertWireType(record, PbWireType.VARINT);
-        msg.deadline_ms = decodePbInt64(record.value);
+        assertWireType(fieldNumber, wireType, VARINT);
+        msg.deadlineMs = readInt64(r);
         break;
       case 3:
-        assertWireType(record, PbWireType.LEN);
-        msg.keys_if_undelivered.push(decodePbBytes(record.value));
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.keysIfUndelivered.push(readBytes(r));
         break;
       case 4:
-        switch (record.wireType) {
-          case 0:
-            msg.backoff_schedule.push(decodePbUint32(record.value));
-            break;
-          default:
-            assertWireType(record, PbWireType.LEN);
-            decodePbPackedUint32(record.value, msg.backoff_schedule);
-            break;
+        if (wireType === VARINT) {
+          msg.backoffSchedule.push(readUint32(r));
+        } else {
+          assertWireType(fieldNumber, wireType, LEN);
+          const p = new Uint8ArrayReader(readBytes(r));
+          while (p.remaining.length !== 0) {
+            msg.backoffSchedule.push(readUint32(p));
+          }
         }
+        break;
+      default:
+        skipPayload(r, fieldNumber, wireType);
         break;
     }
   }
@@ -487,23 +472,25 @@ export interface Watch {
 }
 
 export function defaultWatch(): Watch {
-  return {
-    keys: [],
-  };
+  return { keys: [] };
 }
 
 export function decodeWatch(buf: Uint8Array<ArrayBuffer>): Watch {
   const msg = defaultWatch();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
-    const record = readPbRecord(r);
-    if (!record) {
+    const tag = readTag(r);
+    if (!tag) {
       break;
     }
-    switch (record.fieldNumber) {
+    const { fieldNumber, wireType } = tag;
+    switch (fieldNumber) {
       case 1:
-        assertWireType(record, PbWireType.LEN);
-        msg.keys.push(decodeWatchKey(record.value));
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.keys.push(decodeWatchKey(readBytes(r)));
+        break;
+      default:
+        skipPayload(r, fieldNumber, wireType);
         break;
     }
   }
@@ -518,18 +505,12 @@ export interface WatchOutput {
 export function encodeWatchOutput(msg: WatchOutput): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   if (msg.status) {
-    writePbRecord(w, {
-      fieldNumber: 1,
-      wireType: PbWireType.VARINT,
-      value: encodePbInt32(msg.status),
-    });
+    writeTag(w, { fieldNumber: 1, wireType: VARINT });
+    writeInt32(w, msg.status);
   }
   for (const value of msg.keys) {
-    writePbRecord(w, {
-      fieldNumber: 2,
-      wireType: PbWireType.LEN,
-      value: encodeWatchKeyOutput(value),
-    });
+    writeTag(w, { fieldNumber: 2, wireType: LEN });
+    writeBytes(w, encodeWatchKeyOutput(value));
   }
   return w.bytes;
 }
@@ -539,23 +520,25 @@ export interface WatchKey {
 }
 
 export function defaultWatchKey(): WatchKey {
-  return {
-    key: new Uint8Array(),
-  };
+  return { key: new Uint8Array() };
 }
 
 export function decodeWatchKey(buf: Uint8Array<ArrayBuffer>): WatchKey {
   const msg = defaultWatchKey();
   const r = new Uint8ArrayReader(buf);
   for (;;) {
-    const record = readPbRecord(r);
-    if (!record) {
+    const tag = readTag(r);
+    if (!tag) {
       break;
     }
-    switch (record.fieldNumber) {
+    const { fieldNumber, wireType } = tag;
+    switch (fieldNumber) {
       case 1:
-        assertWireType(record, PbWireType.LEN);
-        msg.key = decodePbBytes(record.value);
+        assertWireType(fieldNumber, wireType, LEN);
+        msg.key = readBytes(r);
+        break;
+      default:
+        skipPayload(r, fieldNumber, wireType);
         break;
     }
   }
@@ -564,7 +547,7 @@ export function decodeWatchKey(buf: Uint8Array<ArrayBuffer>): WatchKey {
 
 export interface WatchKeyOutput {
   changed: boolean;
-  entry_if_changed: KvEntry | null;
+  entryIfChanged: KvEntry | null;
 }
 
 export function encodeWatchKeyOutput(
@@ -572,18 +555,12 @@ export function encodeWatchKeyOutput(
 ): Uint8Array<ArrayBuffer> {
   const w = new Uint8ArrayWriter();
   if (msg.changed) {
-    writePbRecord(w, {
-      fieldNumber: 1,
-      wireType: PbWireType.VARINT,
-      value: encodePbBool(msg.changed),
-    });
+    writeTag(w, { fieldNumber: 1, wireType: VARINT });
+    writeBool(w, msg.changed);
   }
-  if (msg.entry_if_changed) {
-    writePbRecord(w, {
-      fieldNumber: 2,
-      wireType: PbWireType.LEN,
-      value: encodeKvEntry(msg.entry_if_changed),
-    });
+  if (msg.entryIfChanged) {
+    writeTag(w, { fieldNumber: 2, wireType: LEN });
+    writeBytes(w, encodeKvEntry(msg.entryIfChanged));
   }
   return w.bytes;
 }

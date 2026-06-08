@@ -150,7 +150,6 @@ function readKvFloat(r: Uint8ArrayReader): number {
   const bits = BigInt.asIntN(64, readBigUint64BESync(r) ?? unexpectedEof());
   i64Buf[0] = bits ^ (~(bits >> 63n) | signBit);
   const value = f64Buf[0];
-  f64Buf[0] = 0;
   return value;
 }
 
@@ -202,7 +201,6 @@ function writeKvInt(w: Uint8ArrayWriter, value: bigint): undefined {
 function writeKvFloat(w: Uint8ArrayWriter, value: number): undefined {
   f64Buf[0] = value;
   let bits = i64Buf[0];
-  f64Buf[0] = 0;
   if (Number.isNaN(value)) {
     bits = (bits & signBit) | canonicalNaN;
   }
