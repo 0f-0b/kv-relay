@@ -26,8 +26,10 @@ export function defaultSnapshotRead(): SnapshotRead {
   return { ranges: [] };
 }
 
-export function decodeSnapshotRead(buf: Uint8Array<ArrayBuffer>): SnapshotRead {
-  const msg = defaultSnapshotRead();
+export function decodeSnapshotRead(
+  buf: Uint8Array<ArrayBuffer>,
+  msg = defaultSnapshotRead(),
+): SnapshotRead {
   const r = new Uint8ArrayReader(buf);
   for (;;) {
     const tag = readTag(r);
@@ -101,8 +103,10 @@ export function defaultReadRange(): ReadRange {
   };
 }
 
-export function decodeReadRange(buf: Uint8Array<ArrayBuffer>): ReadRange {
-  const msg = defaultReadRange();
+export function decodeReadRange(
+  buf: Uint8Array<ArrayBuffer>,
+  msg = defaultReadRange(),
+): ReadRange {
   const r = new Uint8ArrayReader(buf);
   for (;;) {
     const tag = readTag(r);
@@ -160,8 +164,10 @@ export function defaultAtomicWrite(): AtomicWrite {
   return { checks: [], mutations: [], enqueues: [] };
 }
 
-export function decodeAtomicWrite(buf: Uint8Array<ArrayBuffer>): AtomicWrite {
-  const msg = defaultAtomicWrite();
+export function decodeAtomicWrite(
+  buf: Uint8Array<ArrayBuffer>,
+  msg = defaultAtomicWrite(),
+): AtomicWrite {
   const r = new Uint8ArrayReader(buf);
   for (;;) {
     const tag = readTag(r);
@@ -228,8 +234,10 @@ export function defaultCheck(): Check {
   return { key: new Uint8Array(), versionstamp: new Uint8Array() };
 }
 
-export function decodeCheck(buf: Uint8Array<ArrayBuffer>): Check {
-  const msg = defaultCheck();
+export function decodeCheck(
+  buf: Uint8Array<ArrayBuffer>,
+  msg = defaultCheck(),
+): Check {
   const r = new Uint8ArrayReader(buf);
   for (;;) {
     const tag = readTag(r);
@@ -276,8 +284,10 @@ export function defaultMutation(): Mutation {
   };
 }
 
-export function decodeMutation(buf: Uint8Array<ArrayBuffer>): Mutation {
-  const msg = defaultMutation();
+export function decodeMutation(
+  buf: Uint8Array<ArrayBuffer>,
+  msg = defaultMutation(),
+): Mutation {
   const r = new Uint8ArrayReader(buf);
   for (;;) {
     const tag = readTag(r);
@@ -292,7 +302,7 @@ export function decodeMutation(buf: Uint8Array<ArrayBuffer>): Mutation {
         break;
       case 2:
         assertWireType(fieldNumber, wireType, LEN);
-        msg.value = decodeKvValue(readBytes(r));
+        decodeKvValue(readBytes(r), msg.value ??= defaultKvValue());
         break;
       case 3:
         assertWireType(fieldNumber, wireType, VARINT);
@@ -331,8 +341,10 @@ export function defaultKvValue(): KvValue {
   return { data: new Uint8Array(), encoding: 0 };
 }
 
-export function decodeKvValue(buf: Uint8Array<ArrayBuffer>): KvValue {
-  const msg = defaultKvValue();
+export function decodeKvValue(
+  buf: Uint8Array<ArrayBuffer>,
+  msg = defaultKvValue(),
+): KvValue {
   const r = new Uint8ArrayReader(buf);
   for (;;) {
     const tag = readTag(r);
@@ -426,8 +438,10 @@ export function defaultEnqueue(): Enqueue {
   };
 }
 
-export function decodeEnqueue(buf: Uint8Array<ArrayBuffer>): Enqueue {
-  const msg = defaultEnqueue();
+export function decodeEnqueue(
+  buf: Uint8Array<ArrayBuffer>,
+  msg = defaultEnqueue(),
+): Enqueue {
   const r = new Uint8ArrayReader(buf);
   for (;;) {
     const tag = readTag(r);
@@ -475,8 +489,10 @@ export function defaultWatch(): Watch {
   return { keys: [] };
 }
 
-export function decodeWatch(buf: Uint8Array<ArrayBuffer>): Watch {
-  const msg = defaultWatch();
+export function decodeWatch(
+  buf: Uint8Array<ArrayBuffer>,
+  msg = defaultWatch(),
+): Watch {
   const r = new Uint8ArrayReader(buf);
   for (;;) {
     const tag = readTag(r);
@@ -523,8 +539,10 @@ export function defaultWatchKey(): WatchKey {
   return { key: new Uint8Array() };
 }
 
-export function decodeWatchKey(buf: Uint8Array<ArrayBuffer>): WatchKey {
-  const msg = defaultWatchKey();
+export function decodeWatchKey(
+  buf: Uint8Array<ArrayBuffer>,
+  msg = defaultWatchKey(),
+): WatchKey {
   const r = new Uint8ArrayReader(buf);
   for (;;) {
     const tag = readTag(r);
